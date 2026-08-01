@@ -613,129 +613,141 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem: {Enabled: b
 		function TabData:Section(text)
 			local SectionData = {}
 
-			local SectionButton = Instance.new("TextButton")
-			SectionButton.Name = "SectionButton"
-			SectionButton.Parent = Section
-			SectionButton.BackgroundColor3 = CurrentTheme.TabBackground
-			SectionButton.BackgroundTransparency = 0.400
-			SectionButton.BorderSizePixel = 0
-			SectionButton.Size = UDim2.new(0, 0, 1, -12)
-			SectionButton.Font = Enum.Font.SourceSans
-			SectionButton.Text = text or "First"
-			SectionButton.TextColor3 = CurrentTheme.TabTextColor
-			SectionButton.TextScaled = true
-			SectionButton.TextSize = 14
-			SectionButton.TextWrapped = true
+	local SectionButton = Instance.new("TextButton")
+	SectionButton.Name = "SectionButton"
+	SectionButton.Parent = Section
+	SectionButton.BackgroundColor3 = CurrentTheme.TabBackground
+	SectionButton.BackgroundTransparency = 0.4
+	SectionButton.BorderSizePixel = 0
+	SectionButton.Font = Enum.Font.SourceSans
+	SectionButton.Text = text or "Section"
+	SectionButton.TextColor3 = CurrentTheme.TabTextColor
+	SectionButton.TextScaled = true
+	SectionButton.TextWrapped = true
+	SectionButton.Size = UDim2.new(0,100,1,-12)
 
-			local UIStroke_3 = Instance.new("UIStroke")
-			UIStroke_3.Parent = SectionButton
-			UIStroke_3.Color = CurrentTheme.TabStroke
-			UIStroke_3.Thickness = 3
-			UIStroke_3.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	local Stroke = Instance.new("UIStroke")
+	Stroke.Parent = SectionButton
+	Stroke.Color = CurrentTheme.TabStroke
+	Stroke.Thickness = 3
 
-			local UITextSizeConstraint_3 = Instance.new("UITextSizeConstraint")
-			UITextSizeConstraint_3.Parent = SectionButton
-			UITextSizeConstraint_3.MaxTextSize = 20
+	local TextSize = Instance.new("UITextSizeConstraint")
+	TextSize.Parent = SectionButton
+	TextSize.MaxTextSize = 20
 
-			local SectionTab = Instance.new("ScrollingFrame")
-			SectionTab.Name = text or "SectionTab"
-			SectionTab.Parent = Tab_2
-			SectionTab.Active = true
-			SectionTab.BackgroundTransparency = 1
-			SectionTab.BorderSizePixel = 0
-			SectionTab.Position = UDim2.new(4.61339027e-07, 0, 0.00171906932, 0)
-			SectionTab.Size = UDim2.new(1.00000036, 0, 0.998280466, 0)
-			SectionTab.ScrollBarThickness = 0
-			SectionTab.Visible = false
-			SectionTab.CanvasSize = UDim2.new()
+	local Flex = Instance.new("UIFlexItem")
+	Flex.Parent = SectionButton
+	Flex.FlexMode = Enum.UIFlexMode.Fill
 
-			local UIListLayout_3 = Instance.new("UIListLayout")
-			UIListLayout_3.Parent = SectionTab
-			UIListLayout_3.SortOrder = Enum.SortOrder.LayoutOrder
-			UIListLayout_3.Padding = UDim.new(0, 16)
+	local SectionTab = Instance.new("ScrollingFrame")
+	SectionTab.Name = text or "Section"
+	SectionTab.Parent = Tab_2
+	SectionTab.BackgroundTransparency = 1
+	SectionTab.BorderSizePixel = 0
+	SectionTab.Position = UDim2.new(0,0,0,45)
+	SectionTab.Size = UDim2.new(1,0,1,-45)
+	SectionTab.ScrollBarThickness = 0
+	SectionTab.CanvasSize = UDim2.new()
+	SectionTab.Visible = false
+	SectionTab.AutomaticCanvasSize = Enum.AutomaticSize.None
 
-			local UIPadding_4 = Instance.new("UIPadding")
-			UIPadding_4.Parent = SectionTab
-			UIPadding_4.PaddingBottom = UDim.new(0, 53)
-			UIPadding_4.PaddingLeft = UDim.new(0, 16)
-			UIPadding_4.PaddingRight = UDim.new(0, 16)
-			UIPadding_4.PaddingTop = UDim.new(0, 53)
+	local Layout = Instance.new("UIListLayout")
+	Layout.Parent = SectionTab
+	Layout.Padding = UDim.new(0,16)
+	Layout.SortOrder = Enum.SortOrder.LayoutOrder
 
-      local Flex = Instance.new("UIFlexItem")
-      Flex.Parent = SectionButton
-      Flex.FlexMode = Enum.UIFlexMode.Fill
+	local Padding = Instance.new("UIPadding")
+	Padding.Parent = SectionTab
+	Padding.PaddingTop = UDim.new(0,16)
+	Padding.PaddingBottom = UDim.new(0,16)
+	Padding.PaddingLeft = UDim.new(0,16)
+	Padding.PaddingRight = UDim.new(0,16)
 
-      
+	local function UpdateCanvas()
+		SectionTab.CanvasSize = UDim2.new(
+			0,
+			0,
+			0,
+			Layout.AbsoluteContentSize.Y + 32
+		)
+	end
 
-			UIListLayout_3:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-				SectionTab.CanvasSize = UDim2.new(0, 0, 0, UIListLayout_3.AbsoluteContentSize.Y + 16)
-			end)
+	UpdateCanvas()
+	Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(UpdateCanvas)
 
-			local function Select()
-				for _, v in ipairs(Tab_2:GetChildren()) do
-					if v:IsA("ScrollingFrame") then
-						v.Visible = false
-					end
-				end
+	local function UpdateButtons()
+		local Buttons = {}
 
-				for _, v in ipairs(Section:GetChildren()) do
-					if v:IsA("TextButton") then
-						v.BackgroundColor3 = CurrentTheme.TabBackground
-						v.TextColor3 = CurrentTheme.TabTextColor
-
-						local Stroke = v:FindFirstChildOfClass("UIStroke")
-						if Stroke then
-							Stroke.Color = CurrentTheme.TabStroke
-						end
-					end
-				end
-
-        local function UpdateSectionButtons()
-	        local buttons = {}
-          
-        	for _,v in ipairs(Section:GetChildren()) do
-		        if v:IsA("TextButton") then
-			        table.insert(buttons, v)
-		    	end
-	    	end
-
-			local count = #buttons
-			if count == 0 then return end
-
-			local padding = UIListLayout_2.Padding.Offset
-			local left = UIPadding_3.PaddingLeft.Offset
-			local right = UIPadding_3.PaddingRight.Offset
-
-			local totalWidth = Section.AbsoluteSize.X - left - right
-			local width = (totalWidth - ((count - 1) * padding)) / count
-
-			for _,button in ipairs(buttons) do
-				button.Size = UDim2.new(0, width, 1, -12)
+		for _,v in ipairs(Section:GetChildren()) do
+			if v:IsA("TextButton") then
+				table.insert(Buttons,v)
 			end
 		end
 
-				SectionTab.Visible = true
-				SectionButton.BackgroundColor3 = CurrentTheme.TabBackgroundSelected
-				SectionButton.TextColor3 = CurrentTheme.SelectedTabTextColor
-				UIStroke_3.Color = CurrentTheme.TabBackgroundSelected
+		local Count = #Buttons
+		if Count == 0 then
+			return
+		end
+
+		local PaddingSize = UIListLayout_2.Padding.Offset
+		local Left = UIPadding_3.PaddingLeft.Offset
+		local Right = UIPadding_3.PaddingRight.Offset
+
+		local Width = Section.AbsoluteSize.X - Left - Right
+		local ButtonWidth = (Width - ((Count-1)*PaddingSize))/Count
+
+		for _,Button in ipairs(Buttons) do
+			Button.Size = UDim2.new(0,ButtonWidth,1,-12)
+		end
+	end
+
+	UpdateButtons()
+
+	Section.ChildAdded:Connect(UpdateButtons)
+	Section.ChildRemoved:Connect(UpdateButtons)
+	Section:GetPropertyChangedSignal("AbsoluteSize"):Connect(UpdateButtons)
+
+	local function Select()
+		for _,v in ipairs(Tab_2:GetChildren()) do
+			if v:IsA("ScrollingFrame") then
+				v.Visible = false
 			end
+		end
 
-			SectionButton.MouseButton1Click:Connect(Select)
+		for _,v in ipairs(Section:GetChildren()) do
+			if v:IsA("TextButton") then
+				v.BackgroundColor3 = CurrentTheme.TabBackground
+				v.TextColor3 = CurrentTheme.TabTextColor
 
-			local First = true
-
-			for _, v in ipairs(Tab_2:GetChildren()) do
-				if v:IsA("ScrollingFrame") and v ~= SectionTab then
-					First = false
-					break
+				local S = v:FindFirstChildOfClass("UIStroke")
+				if S then
+					S.Color = CurrentTheme.TabStroke
 				end
 			end
+		end
 
-			if First then
-				Select()
-			end
+		SectionTab.Visible = true
+		SectionButton.BackgroundColor3 = CurrentTheme.TabBackgroundSelected
+		SectionButton.TextColor3 = CurrentTheme.SelectedTabTextColor
+		Stroke.Color = CurrentTheme.TabBackgroundSelected
+	end
 
-			SectionData.Section = SectionTab
+	SectionButton.MouseButton1Click:Connect(Select)
+
+	local First = true
+	for _,v in ipairs(Tab_2:GetChildren()) do
+		if v:IsA("ScrollingFrame") and v ~= SectionTab then
+			First = false
+			break
+		end
+	end
+
+	if First then
+		Select()
+	end
+
+	SectionData.Section = SectionTab
+
 
 
 			function SectionData:Button(text, callback)
