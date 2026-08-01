@@ -693,26 +693,26 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem: {Enabled: b
         local function UpdateSectionButtons()
 	        local buttons = {}
           
-          for _,v in ipairs(Section:GetChildren()) do
+        	for _,v in ipairs(Section:GetChildren()) do
 		        if v:IsA("TextButton") then
 			        table.insert(buttons, v)
-		      end
-	    end
+		    	end
+	    	end
 
-	local count = #buttons
-	if count == 0 then return end
+			local count = #buttons
+			if count == 0 then return end
 
-	local padding = UIListLayout_2.Padding.Offset
-	local left = UIPadding_3.PaddingLeft.Offset
-	local right = UIPadding_3.PaddingRight.Offset
+			local padding = UIListLayout_2.Padding.Offset
+			local left = UIPadding_3.PaddingLeft.Offset
+			local right = UIPadding_3.PaddingRight.Offset
 
-	local totalWidth = Section.AbsoluteSize.X - left - right
-	local width = (totalWidth - ((count - 1) * padding)) / count
+			local totalWidth = Section.AbsoluteSize.X - left - right
+			local width = (totalWidth - ((count - 1) * padding)) / count
 
-	for _,button in ipairs(buttons) do
-		button.Size = UDim2.new(0, width, 1, -12)
-	end
-end
+			for _,button in ipairs(buttons) do
+				button.Size = UDim2.new(0, width, 1, -12)
+			end
+		end
 
 				SectionTab.Visible = true
 				SectionButton.BackgroundColor3 = CurrentTheme.TabBackgroundSelected
