@@ -1,9 +1,15 @@
 local CrackedLib = {}
 
--- CrackedLib v2
+-- CrackedLib v2.1.1
 -- Fixed/reworked version of the supplied library.
+-- Fixes applied:
+--   - Critical: Section() now correctly returns SectionData (was returning TabData)
+--   - Removed duplicate fsAvailable definition
+--   - Cleaned indentation of Config* helpers and GUI config methods
+--   - Removed broken recursive GUI.Destroy stub
 -- Preserves the public API: Init, CreateTab, Section, Button, Label,
--- Toggle, Slider, Dropdown, ConfigToggle, ConfigSlider, ConfigDropdown.
+-- Toggle, Slider, Dropdown, ColorPicker, ConfigToggle, ConfigSlider,
+-- ConfigDropdown, ConfigColorPicker.
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -90,7 +96,9 @@ CrackedLib.Theme = {
 
 -- Filesystem-backed config is optional. Never let a missing executor API break the UI.
 local function fsAvailable()
-    return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function"
+    return type(writefile) == "function"
+        and type(readfile) == "function"
+        and type(isfile) == "function"
 end
 
 CrackedLib.Config = {
@@ -98,12 +106,6 @@ CrackedLib.Config = {
     FileName = "CrackedLib.json",
     Data = {}
 }
-
-local function fsAvailable()
-    return type(writefile) == "function"
-        and type(readfile) == "function"
-        and type(isfile) == "function"
-end
 
 function CrackedLib.Config:GetPath()
     if type(makefolder) == "function" then
@@ -1285,139 +1287,144 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
             end
 
             function SectionData:ConfigColorPicker(label, default, callback, key)
-    local cfgKey = key or label
-    local saved = CrackedLib.Config.Data[cfgKey]
+                local cfgKey = key or label
+                local saved = CrackedLib.Config.Data[cfgKey]
 
-    local initial = default
+                local initial = default
 
-    if type(saved) == "table"
-        and tonumber(saved.r)
-        and tonumber(saved.g)
-        and tonumber(saved.b) then
+                if type(saved) == "table"
+                    and tonumber(saved.r)
+                    and tonumber(saved.g)
+                    and tonumber(saved.b) then
 
-        initial = Color3.new(
-            math.clamp(tonumber(saved.r), 0, 1),
-            math.clamp(tonumber(saved.g), 0, 1),
-            math.clamp(tonumber(saved.b), 0, 1)
-        )
-    end
+                    initial = Color3.new(
+                        math.clamp(tonumber(saved.r), 0, 1),
+                        math.clamp(tonumber(saved.g), 0, 1),
+                        math.clamp(tonumber(saved.b), 0, 1)
+                    )
+                end
 
-    if typeof(initial) ~= "Color3" then
-        initial = Color3.new(1, 1, 1)
-    end
+                if typeof(initial) ~= "Color3" then
+                    initial = Color3.new(1, 1, 1)
+                end
 
-    local data = self:ColorPicker(label, initial, function(color)
-        CrackedLib.Config.Data[cfgKey] = {
-            r = color.R,
-            g = color.G,
-            b = color.B
-        }
+                local data = self:ColorPicker(label, initial, function(color)
+                    CrackedLib.Config.Data[cfgKey] = {
+                        r = color.R,
+                        g = color.G,
+                        b = color.B
+                    }
 
-        CrackedLib.Config:Save()
+                    CrackedLib.Config:Save()
 
-        if callback then
-            callback(color)
-        end
-    end)
+                    if callback then
+                        callback(color)
+                    end
+                end)
 
-    -- Only create the default entry if nothing was saved before.
-    if saved == nil then
-        CrackedLib.Config.Data[cfgKey] = {
-            r = initial.R,
-            g = initial.G,
-            b = initial.B
-        }
+                -- Only create the default entry if nothing was saved before.
+                if saved == nil then
+                    CrackedLib.Config.Data[cfgKey] = {
+                        r = initial.R,
+                        g = initial.G,
+                        b = initial.B
+                    }
 
-        CrackedLib.Config:Save()
-    end
+                    CrackedLib.Config:Save()
+                end
 
-    return data
-end
+                return data
+            end
+
             function SectionData:ConfigToggle(label, default, callback, key)
-    local cfgKey = key or label
-    local saved = CrackedLib.Config.Data[cfgKey]
+                local cfgKey = key or label
+                local saved = CrackedLib.Config.Data[cfgKey]
 
-    local value
+                local value
 
-    if type(saved) == "boolean" then
-        value = saved
-    else
-        value = default == true
-    end
+                if type(saved) == "boolean" then
+                    value = saved
+                else
+                    value = default == true
+                end
 
-    local data = self:Toggle(label, value, function(v)
-        CrackedLib.Config.Data[cfgKey] = v
-        CrackedLib.Config:Save()
+                local data = self:Toggle(label, value, function(v)
+                    CrackedLib.Config.Data[cfgKey] = v
+                    CrackedLib.Config:Save()
 
-        if callback then
-            callback(v)
-        end
-    end)
+                    if callback then
+                        callback(v)
+                    end
+                end)
 
-    return data
-end
+                return data
+            end
 
             function SectionData:ConfigDropdown(label, options, callback, MultiSelect, key)
-    local cfgKey = key or label
-    local saved = CrackedLib.Config.Data[cfgKey]
+                local cfgKey = key or label
+                local saved = CrackedLib.Config.Data[cfgKey]
 
-    local data = self:Dropdown(
-        label,
-        options,
-        function(v)
-            CrackedLib.Config.Data[cfgKey] = v
-            CrackedLib.Config:Save()
+                local data = self:Dropdown(
+                    label,
+                    options,
+                    function(v)
+                        CrackedLib.Config.Data[cfgKey] = v
+                        CrackedLib.Config:Save()
 
-            if callback then
-                callback(v)
+                        if callback then
+                            callback(v)
+                        end
+                    end,
+                    MultiSelect
+                )
+
+                if saved ~= nil then
+                    task.defer(function()
+                        if data then
+                            data:Set(saved)
+                        end
+                    end)
+                end
+
+                return data
             end
-        end,
-        MultiSelect
-    )
-
-    if saved ~= nil then
-        task.defer(function()
-            if data then
-                data:Set(saved)
-            end
-        end)
-    end
-
-    return data
-end
 
             function SectionData:ConfigSlider(label, min, max, default, callback, key)
-    local cfgKey = key or label
-    local saved = CrackedLib.Config.Data[cfgKey]
+                local cfgKey = key or label
+                local saved = CrackedLib.Config.Data[cfgKey]
 
-    min = tonumber(min) or 0
-    max = tonumber(max) or 100
+                min = tonumber(min) or 0
+                max = tonumber(max) or 100
 
-    if max < min then
-        min, max = max, min
-    end
+                if max < min then
+                    min, max = max, min
+                end
 
-    local value
+                local value
 
-    if type(saved) == "number" then
-        value = saved
-    else
-        value = tonumber(default) or min
-    end
+                if type(saved) == "number" then
+                    value = saved
+                else
+                    value = tonumber(default) or min
+                end
 
-    value = math.clamp(value, min, max)
+                value = math.clamp(value, min, max)
 
-    local data = self:Slider(label, min, max, value, function(v)
-        CrackedLib.Config.Data[cfgKey] = v
-        CrackedLib.Config:Save()
+                local data = self:Slider(label, min, max, value, function(v)
+                    CrackedLib.Config.Data[cfgKey] = v
+                    CrackedLib.Config:Save()
 
-        if callback then
-            callback(v)
+                    if callback then
+                        callback(v)
+                    end
+                end)
+
+                return data
+            end
+
+            return SectionData
         end
-    end)
 
-    return data
-end
         return TabData
     end
 
@@ -1431,9 +1438,8 @@ end
         return true
     end
 
-    GUI.ScreenGui=ScreenGui
-    GUI.Main=Main
-    GUI.Destroy=function() GUI:Destroy() end
+    GUI.ScreenGui = ScreenGui
+    GUI.Main = Main
 
     if draggable then
         local dragging=false
@@ -1480,26 +1486,26 @@ end
     end)
 
     function GUI:SaveConfig()
-    return CrackedLib.Config:Save()
-end
+        return CrackedLib.Config:Save()
+    end
 
-function GUI:LoadConfig()
-    return CrackedLib.Config:Load()
-end
+    function GUI:LoadConfig()
+        return CrackedLib.Config:Load()
+    end
 
-function GUI:ClearConfig()
-    return CrackedLib.Config:Clear()
-end
+    function GUI:ClearConfig()
+        return CrackedLib.Config:Clear()
+    end
 
-function GUI:GetConfig()
-    return CrackedLib.Config.Data
-end
+    function GUI:GetConfig()
+        return CrackedLib.Config.Data
+    end
 
     return GUI
 end
 
 -- Optional local test from the original file, disabled by default.
-CrackedLib.Version = "2.1.0"
+CrackedLib.Version = "2.1.1"
 CrackedLib.RunStudioTest = function()
     local lib=CrackedLib:Init("CrackLib v2",true,Enum.KeyCode.RightShift,"Default",{Enabled=false})
     if not lib then return end
