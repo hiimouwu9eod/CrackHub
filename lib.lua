@@ -937,6 +937,304 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 return data
             end
 
+            function SectionData:ColorPicker(label, default, callback)
+                local data = {Color = typeof(default) == "Color3" and default or Color3.new(1,1,1)}
+                local open = false
+                local popup
+
+                local b = Instance.new("TextButton")
+                b.Size = UDim2.new(1,0,0,45)
+                b.BackgroundColor3 = CurrentTheme.ElementBackground
+                b.BorderSizePixel = 0
+                b.Text = ""
+                b.AutoButtonColor = false
+                b.Parent = page
+                makeCorner(b,8)
+                local bs = makeStroke(b,CurrentTheme.ElementStroke,2)
+
+                local t = Instance.new("TextLabel")
+                t.BackgroundTransparency = 1
+                t.Position = UDim2.new(0,24,0,0)
+                t.Size = UDim2.new(0.65,0,1,0)
+                t.Text = tostring(label or "Color")
+                t.TextColor3 = CurrentTheme.TextColor
+                t.TextScaled = true
+                t.TextXAlignment = Enum.TextXAlignment.Left
+                t.Parent = b
+
+                local preview = Instance.new("Frame")
+                preview.AnchorPoint = Vector2.new(1,0.5)
+                preview.Position = UDim2.new(0.97,0,0.5,0)
+                preview.Size = UDim2.fromOffset(58,28)
+                preview.BackgroundColor3 = data.Color
+                preview.BorderSizePixel = 0
+                preview.Parent = b
+                makeCorner(preview,7)
+                local ps = makeStroke(preview,CurrentTheme.ElementStroke,2)
+
+                local function updatePreview()
+                    preview.BackgroundColor3 = data.Color
+                end
+
+                local function setColor(c, call)
+                    if typeof(c) ~= "Color3" then return end
+                    data.Color = c
+                    updatePreview()
+                    if call and callback then
+                        task.spawn(callback, data.Color)
+                    end
+                end
+
+                local function makeGradient(parent, colors, rotation)
+                    local g = Instance.new("UIGradient")
+                    g.Color = ColorSequence.new(colors)
+                    g.Rotation = rotation or 0
+                    g.Parent = parent
+                    return g
+                end
+
+                local function createPopup()
+                    if popup then popup:Destroy() end
+
+                    popup = Instance.new("Frame")
+                    popup.Name = "ColorPickerPopup"
+                    popup.Size = UDim2.fromOffset(300,330)
+                    popup.BackgroundColor3 = CurrentTheme.Background
+                    popup.BorderSizePixel = 0
+                    popup.ZIndex = 100
+                    popup.Parent = ScreenGui
+                    makeCorner(popup,10)
+                    makeStroke(popup,CurrentTheme.ElementStroke,2)
+
+                    local title = Instance.new("TextLabel")
+                    title.BackgroundTransparency = 1
+                    title.Position = UDim2.fromOffset(12,8)
+                    title.Size = UDim2.new(1,-24,0,28)
+                    title.Text = tostring(label or "Color Picker")
+                    title.TextColor3 = CurrentTheme.TextColor
+                    title.TextScaled = true
+                    title.TextXAlignment = Enum.TextXAlignment.Left
+                    title.ZIndex = 101
+                    title.Parent = popup
+
+                    local square = Instance.new("Frame")
+                    square.Position = UDim2.fromOffset(15,45)
+                    square.Size = UDim2.fromOffset(220,220)
+                    square.BackgroundColor3 = Color3.fromHSV(select(1, data.Color:ToHSV()),1,1)
+                    square.BorderSizePixel = 0
+                    square.ZIndex = 101
+                    square.Parent = popup
+                    makeCorner(square,6)
+
+                    makeGradient(square, {
+                        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+                        ColorSequenceKeypoint.new(1, Color3.fromHSV(select(1, data.Color:ToHSV()),1,1))
+                    }, 0)
+
+                    local black = Instance.new("Frame")
+                    black.BackgroundTransparency = 1
+                    black.Size = UDim2.fromScale(1,1)
+                    black.ZIndex = 102
+                    black.Parent = square
+                    makeGradient(black, {
+                        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
+                        ColorSequenceKeypoint.new(1, Color3.new(0,0,0))
+                    }, 90)
+
+                    local cursor = Instance.new("Frame")
+                    cursor.Size = UDim2.fromOffset(10,10)
+                    cursor.AnchorPoint = Vector2.new(0.5,0.5)
+                    cursor.BackgroundTransparency = 1
+                    cursor.ZIndex = 103
+                    cursor.Parent = square
+                    local cursorStroke = makeStroke(cursor,Color3.new(1,1,1),2)
+
+                    local hue = Instance.new("Frame")
+                    hue.Position = UDim2.fromOffset(245,45)
+                    hue.Size = UDim2.fromOffset(35,220)
+                    hue.BackgroundColor3 = Color3.new(1,1,1)
+                    hue.BorderSizePixel = 0
+                    hue.ZIndex = 101
+                    hue.Parent = popup
+                    makeCorner(hue,6)
+                    makeGradient(hue,{
+                        ColorSequenceKeypoint.new(0,Color3.fromRGB(255,0,0)),
+                        ColorSequenceKeypoint.new(1/6,Color3.fromRGB(255,255,0)),
+                        ColorSequenceKeypoint.new(2/6,Color3.fromRGB(0,255,0)),
+                        ColorSequenceKeypoint.new(3/6,Color3.fromRGB(0,255,255)),
+                        ColorSequenceKeypoint.new(4/6,Color3.fromRGB(0,0,255)),
+                        ColorSequenceKeypoint.new(5/6,Color3.fromRGB(255,0,255)),
+                        ColorSequenceKeypoint.new(1,Color3.fromRGB(255,0,0))
+                    },90)
+
+                    local hueCursor = Instance.new("Frame")
+                    hueCursor.Size = UDim2.new(1,4,0,4)
+                    hueCursor.AnchorPoint = Vector2.new(0.5,0.5)
+                    hueCursor.BackgroundColor3 = Color3.new(1,1,1)
+                    hueCursor.BorderSizePixel = 0
+                    hueCursor.ZIndex = 103
+                    hueCursor.Parent = hue
+                    makeCorner(hueCursor,2)
+
+                    local hex = Instance.new("TextLabel")
+                    hex.BackgroundTransparency = 1
+                    hex.Position = UDim2.fromOffset(15,272)
+                    hex.Size = UDim2.fromOffset(170,25)
+                    hex.TextColor3 = CurrentTheme.TextColor
+                    hex.TextScaled = true
+                    hex.TextXAlignment = Enum.TextXAlignment.Left
+                    hex.ZIndex = 101
+                    hex.Parent = popup
+
+                    local close = Instance.new("TextButton")
+                    close.Position = UDim2.fromOffset(205,270)
+                    close.Size = UDim2.fromOffset(75,30)
+                    close.BackgroundColor3 = CurrentTheme.ElementBackground
+                    close.BorderSizePixel = 0
+                    close.Text = "Close"
+                    close.TextColor3 = CurrentTheme.TextColor
+                    close.TextScaled = true
+                    close.ZIndex = 101
+                    close.Parent = popup
+                    makeCorner(close,6)
+
+                    local h,s,v = data.Color:ToHSV()
+
+                    local function refresh()
+                        square.BackgroundColor3 = Color3.fromHSV(h,1,1)
+                        local x = math.clamp(s,0,1) * square.AbsoluteSize.X
+                        local y = (1-math.clamp(v,0,1)) * square.AbsoluteSize.Y
+                        cursor.Position = UDim2.fromOffset(x,y)
+                        hueCursor.Position = UDim2.new(0.5,0,math.clamp(h,0,1),0)
+                        local c = Color3.fromHSV(h,s,v)
+                        setColor(c,false)
+                        hex.Text = string.format("#%02X%02X%02X",
+                            math.floor(c.R*255+0.5),
+                            math.floor(c.G*255+0.5),
+                            math.floor(c.B*255+0.5))
+                    end
+
+                    local function updateSquare(x,y)
+                        local abs = square.AbsolutePosition
+                        local size = square.AbsoluteSize
+                        s = math.clamp((x-abs.X)/math.max(size.X,1),0,1)
+                        v = math.clamp(1-(y-abs.Y)/math.max(size.Y,1),0,1)
+                        refresh()
+                        if callback then task.spawn(callback,data.Color) end
+                    end
+
+                    local function updateHue(y)
+                        local abs = hue.AbsolutePosition
+                        local size = hue.AbsoluteSize
+                        h = math.clamp((y-abs.Y)/math.max(size.Y,1),0,1)
+                        refresh()
+                        if callback then task.spawn(callback,data.Color) end
+                    end
+
+                    local draggingSquare = false
+                    local draggingHue = false
+
+                    connectAndTrack(connections,square.InputBegan,function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                            draggingSquare = true
+                            updateSquare(input.Position.X,input.Position.Y)
+                        end
+                    end)
+                    connectAndTrack(connections,hue.InputBegan,function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                            draggingHue = true
+                            updateHue(input.Position.Y)
+                        end
+                    end)
+                    connectAndTrack(connections,UserInputService.InputChanged,function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                            if draggingSquare then updateSquare(input.Position.X,input.Position.Y) end
+                            if draggingHue then updateHue(input.Position.Y) end
+                        end
+                    end)
+                    connectAndTrack(connections,UserInputService.InputEnded,function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                            draggingSquare = false
+                            draggingHue = false
+                        end
+                    end)
+                    connectAndTrack(connections,close.MouseButton1Click,function()
+                        open = false
+                        if popup then popup:Destroy(); popup=nil end
+                    end)
+
+                    refresh()
+                    popup.Position = UDim2.fromOffset(
+                        math.max(5, math.min(b.AbsolutePosition.X, workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X-305 or b.AbsolutePosition.X)),
+                        b.AbsolutePosition.Y + b.AbsoluteSize.Y + 6
+                    )
+                end
+
+                connectAndTrack(connections,b.MouseButton1Click,function()
+                    open = not open
+                    if open then createPopup()
+                    elseif popup then popup:Destroy(); popup=nil end
+                end)
+
+                function data:Set(value, call)
+                    if typeof(value) == "Color3" then
+                        setColor(value,call ~= false)
+                    elseif type(value) == "table" and tonumber(value.r) and tonumber(value.g) and tonumber(value.b) then
+                        setColor(Color3.new(
+                            math.clamp(value.r,0,1),
+                            math.clamp(value.g,0,1),
+                            math.clamp(value.b,0,1)
+                        ),call ~= false)
+                    end
+                end
+
+                function data:Get()
+                    return data.Color
+                end
+
+                function data:RefreshTheme()
+                    b.BackgroundColor3 = CurrentTheme.ElementBackground
+                    bs.Color = CurrentTheme.ElementStroke
+                    t.TextColor3 = CurrentTheme.TextColor
+                    ps.Color = CurrentTheme.ElementStroke
+                    preview.BackgroundColor3 = data.Color
+                end
+
+                updatePreview()
+                return data
+            end
+
+            function SectionData:ConfigColorPicker(label, default, callback, key)
+                local cfgKey = key or label
+                local saved = CrackedLib.Config.Data[cfgKey]
+                local initial = default
+
+                if type(saved) == "table" and tonumber(saved.r) and tonumber(saved.g) and tonumber(saved.b) then
+                    initial = Color3.new(
+                        math.clamp(saved.r,0,1),
+                        math.clamp(saved.g,0,1),
+                        math.clamp(saved.b,0,1)
+                    )
+                end
+
+                local data = self:ColorPicker(label,initial,function(c)
+                    CrackedLib.Config.Data[cfgKey] = {r=c.R,g=c.G,b=c.B}
+                    CrackedLib.Config:Save()
+                    if callback then callback(c) end
+                end)
+
+                if saved == nil and typeof(initial) == "Color3" then
+                    CrackedLib.Config.Data[cfgKey] = {r=initial.R,g=initial.G,b=initial.B}
+                    CrackedLib.Config:Save()
+                elseif saved ~= nil then
+                    task.defer(function()
+                        if not destroyed then data:Set(initial,false) end
+                    end)
+                end
+
+                return data
+            end
+
             function SectionData:ConfigToggle(label, default, callback, key)
                 local cfgKey=key or label
                 local saved=CrackedLib.Config.Data[cfgKey]
