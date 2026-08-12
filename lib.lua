@@ -1,7 +1,4 @@
-
-
-
-local CrackedLib = {}
+ocal CrackedLib = {}
 
 -- CrackedLib v2
 -- Fixed/reworked version of the supplied library.
@@ -446,76 +443,83 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
         connectAndTrack(connections, Tab.MouseButton1Click, function() selectTab(info) end)
         if not selectedTab then selectTab(info) end
 
+        -- Shared section navigation/content area for this tab.
+        -- Each Section gets its own button and page; pages are not nested inside
+        -- a 42px-high section frame (the old implementation clipped all controls).
+        local sectionBar = Instance.new("Frame")
+        sectionBar.Name = "SectionBar"
+        sectionBar.Position = UDim2.new(0,0,0,0)
+        sectionBar.Size = UDim2.new(1,0,0,46)
+        sectionBar.BackgroundTransparency = 1
+        sectionBar.Parent = content
+
+        local sectionLayout = Instance.new("UIListLayout")
+        sectionLayout.FillDirection = Enum.FillDirection.Horizontal
+        sectionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+        sectionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        sectionLayout.Padding = UDim.new(0,8)
+        sectionLayout.Parent = sectionBar
+
+        local sectionPadding = Instance.new("UIPadding")
+        sectionPadding.PaddingLeft = UDim.new(0,8)
+        sectionPadding.PaddingRight = UDim.new(0,8)
+        sectionPadding.Parent = sectionBar
+
+        local sectionPages = Instance.new("Frame")
+        sectionPages.Name = "SectionPages"
+        sectionPages.Position = UDim2.new(0,0,0,46)
+        sectionPages.Size = UDim2.new(1,0,1,-46)
+        sectionPages.BackgroundTransparency = 1
+        sectionPages.Parent = content
+
+        local sectionTabs = {}
+        local selectedSection
+
+        local function selectSection(s)
+            selectedSection = s
+            for _, item in ipairs(sectionTabs) do
+                local active = item == s
+                item.Page.Visible = active
+                item.Button.BackgroundColor3 = active and CurrentTheme.TabBackgroundSelected or CurrentTheme.TabBackground
+                item.Button.TextColor3 = active and CurrentTheme.SelectedTabTextColor or CurrentTheme.TabTextColor
+                item.Stroke.Color = active and CurrentTheme.TabBackgroundSelected or CurrentTheme.TabStroke
+            end
+        end
+
         function TabData:Section(sectionName)
             local SectionData = {}
-            local section = Instance.new("Frame")
-            section.Name = tostring(sectionName or "Section")
-            section.Position = UDim2.new(0,0,0,0)
-            section.Size = UDim2.new(1,0,0,42)
-            section.BackgroundTransparency = 1
-            section.Parent = content
-
-            local sectionButtons = Instance.new("Frame")
-            sectionButtons.Size = UDim2.new(1,0,0,42)
-            sectionButtons.BackgroundTransparency = 1
-            sectionButtons.Parent = section
-            local sbLayout = Instance.new("UIListLayout")
-            sbLayout.FillDirection = Enum.FillDirection.Horizontal
-            sbLayout.Padding = UDim.new(0,8)
-            sbLayout.Parent = sectionButtons
-            local sbPad = Instance.new("UIPadding")
-            sbPad.PaddingLeft = UDim.new(0,8)
-            sbPad.PaddingRight = UDim.new(0,8)
-            sbPad.Parent = sectionButtons
-
-            local contentHolder = Instance.new("Frame")
-            contentHolder.Position = UDim2.new(0,0,0,48)
-            contentHolder.Size = UDim2.new(1,0,1,-48)
-            contentHolder.BackgroundTransparency = 1
-            contentHolder.Parent = section
-
-            local sectionTabs = {}
-            local selectedSection
-
-            local function selectSection(s)
-                selectedSection = s
-                for _, item in ipairs(sectionTabs) do
-                    item.Page.Visible = item == s
-                    item.Button.BackgroundColor3 = item == s and CurrentTheme.TabBackgroundSelected or CurrentTheme.TabBackground
-                    item.Button.TextColor3 = item == s and CurrentTheme.SelectedTabTextColor or CurrentTheme.TabTextColor
-                    item.Stroke.Color = item == s and CurrentTheme.TabBackgroundSelected or CurrentTheme.TabStroke
-                end
-            end
-
-            function SectionData:_Select()
-                if selectedSection then selectSection(selectedSection) end
-            end
+            local displayName = tostring(sectionName or "Section")
 
             local SectionButton = Instance.new("TextButton")
-            SectionButton.Size = UDim2.fromOffset(100,34)
+            SectionButton.Name = displayName
+            SectionButton.Size = UDim2.fromOffset(120,34)
             SectionButton.BackgroundColor3 = CurrentTheme.TabBackground
             SectionButton.BorderSizePixel = 0
-            SectionButton.Text = tostring(sectionName or "Section")
+            SectionButton.Text = displayName
             SectionButton.TextColor3 = CurrentTheme.TabTextColor
             SectionButton.TextScaled = true
             SectionButton.AutoButtonColor = false
-            SectionButton.Parent = sectionButtons
+            SectionButton.Parent = sectionBar
             makeCorner(SectionButton, 6)
             local sectionStroke = makeStroke(SectionButton, CurrentTheme.TabStroke, 2)
 
             local page = Instance.new("ScrollingFrame")
+            page.Name = displayName .. "Page"
             page.Size = UDim2.fromScale(1,1)
             page.BackgroundTransparency = 1
             page.BorderSizePixel = 0
             page.ScrollBarThickness = 4
+            page.ScrollingDirection = Enum.ScrollingDirection.Y
             page.CanvasSize = UDim2.new()
             page.AutomaticCanvasSize = Enum.AutomaticSize.Y
             page.Visible = false
-            page.Parent = contentHolder
+            page.Parent = sectionPages
 
             local layout = Instance.new("UIListLayout")
             layout.Padding = UDim.new(0,12)
+            layout.SortOrder = Enum.SortOrder.LayoutOrder
             layout.Parent = page
+
             local pad = Instance.new("UIPadding")
             pad.PaddingTop = UDim.new(0,12)
             pad.PaddingBottom = UDim.new(0,12)
@@ -525,13 +529,17 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 
             local sInfo = {Button=SectionButton, Page=page, Stroke=sectionStroke}
             table.insert(sectionTabs, sInfo)
-            connectAndTrack(connections, SectionButton.MouseButton1Click, function() selectSection(sInfo) end)
-            if not selectedSection then selectSection(sInfo) end
 
-            local function addRefresh(method)
-                -- UI objects created by this section expose their own RefreshTheme;
-                -- this helper exists to keep the API implementation consistent.
-                return method
+            connectAndTrack(connections, SectionButton.MouseButton1Click, function()
+                selectSection(sInfo)
+            end)
+
+            if not selectedSection then
+                selectSection(sInfo)
+            end
+
+            function SectionData:_Select()
+                selectSection(sInfo)
             end
 
             function SectionData:Button(label, callback)
@@ -545,6 +553,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 b.Parent = page
                 makeCorner(b,8)
                 local bs = makeStroke(b,CurrentTheme.ElementStroke,2)
+
                 local t = Instance.new("TextLabel")
                 t.BackgroundTransparency = 1
                 t.Size = UDim2.new(1,-48,1,0)
@@ -554,9 +563,21 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 t.TextScaled = true
                 t.TextXAlignment = Enum.TextXAlignment.Left
                 t.Parent = b
-                connectAndTrack(connections,b.MouseEnter,function() data.Hover=true; b.BackgroundColor3=CurrentTheme.ElementBackgroundHover; bs.Color=CurrentTheme.ElementStrokeHover end)
-                connectAndTrack(connections,b.MouseLeave,function() data.Hover=false; b.BackgroundColor3=CurrentTheme.ElementBackground; bs.Color=CurrentTheme.ElementStroke end)
-                connectAndTrack(connections,b.MouseButton1Click,function() if callback then task.spawn(callback) end end)
+
+                connectAndTrack(connections,b.MouseEnter,function()
+                    data.Hover=true
+                    b.BackgroundColor3=CurrentTheme.ElementBackgroundHover
+                    bs.Color=CurrentTheme.ElementStrokeHover
+                end)
+                connectAndTrack(connections,b.MouseLeave,function()
+                    data.Hover=false
+                    b.BackgroundColor3=CurrentTheme.ElementBackground
+                    bs.Color=CurrentTheme.ElementStroke
+                end)
+                connectAndTrack(connections,b.MouseButton1Click,function()
+                    if callback then task.spawn(callback) end
+                end)
+
                 function data:RefreshTheme()
                     b.BackgroundColor3=data.Hover and CurrentTheme.ElementBackgroundHover or CurrentTheme.ElementBackground
                     bs.Color=data.Hover and CurrentTheme.ElementStrokeHover or CurrentTheme.ElementStroke
@@ -574,6 +595,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 f.Parent = page
                 makeCorner(f,8)
                 local s = makeStroke(f,CurrentTheme.ElementStroke,2)
+
                 local t = Instance.new("TextLabel")
                 t.BackgroundTransparency = 1
                 t.Size = UDim2.new(1,-48,1,0)
@@ -584,53 +606,149 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 t.TextWrapped = true
                 t.TextXAlignment = Enum.TextXAlignment.Left
                 t.Parent = f
+
                 function data:SetText(value) t.Text=tostring(value) end
-                function data:RefreshTheme() f.BackgroundColor3=CurrentTheme.ElementBackground; s.Color=CurrentTheme.ElementStroke; t.TextColor3=CurrentTheme.TextColor end
+                function data:RefreshTheme()
+                    f.BackgroundColor3=CurrentTheme.ElementBackground
+                    s.Color=CurrentTheme.ElementStroke
+                    t.TextColor3=CurrentTheme.TextColor
+                end
                 return data
             end
 
             function SectionData:Toggle(label, state, callback)
                 local data = {State = state == true, Hover=false}
                 local b = Instance.new("TextButton")
-                b.Size=UDim2.new(1,0,0,45); b.BackgroundColor3=CurrentTheme.ElementBackground; b.BorderSizePixel=0; b.Text=""; b.AutoButtonColor=false; b.Parent=page
-                makeCorner(b,8); local bs=makeStroke(b,CurrentTheme.ElementStroke,2)
-                local t=Instance.new("TextLabel"); t.BackgroundTransparency=1; t.Position=UDim2.new(0,24,0,0); t.Size=UDim2.new(0.7,0,1,0); t.Text=tostring(label or "Toggle"); t.TextColor3=CurrentTheme.TextColor; t.TextScaled=true; t.TextXAlignment=Enum.TextXAlignment.Left; t.Parent=b
-                local bg=Instance.new("Frame"); bg.AnchorPoint=Vector2.new(1,0.5); bg.Position=UDim2.new(0.97,0,0.5,0); bg.Size=UDim2.fromOffset(42,22); bg.BackgroundColor3=CurrentTheme.Background; bg.BorderSizePixel=0; bg.Parent=b; makeCorner(bg,11); local gs=makeStroke(bg,CurrentTheme.ElementStroke,2)
-                local dot=Instance.new("Frame"); dot.Size=UDim2.fromOffset(18,18); dot.BackgroundColor3=CurrentTheme.TextColor; dot.BorderSizePixel=0; dot.Parent=bg; makeCorner(dot,9)
+                b.Size=UDim2.new(1,0,0,45)
+                b.BackgroundColor3=CurrentTheme.ElementBackground
+                b.BorderSizePixel=0
+                b.Text=""
+                b.AutoButtonColor=false
+                b.Parent=page
+                makeCorner(b,8)
+                local bs=makeStroke(b,CurrentTheme.ElementStroke,2)
+
+                local t=Instance.new("TextLabel")
+                t.BackgroundTransparency=1
+                t.Position=UDim2.new(0,24,0,0)
+                t.Size=UDim2.new(0.7,0,1,0)
+                t.Text=tostring(label or "Toggle")
+                t.TextColor3=CurrentTheme.TextColor
+                t.TextScaled=true
+                t.TextXAlignment=Enum.TextXAlignment.Left
+                t.Parent=b
+
+                local bg=Instance.new("Frame")
+                bg.AnchorPoint=Vector2.new(1,0.5)
+                bg.Position=UDim2.new(0.97,0,0.5,0)
+                bg.Size=UDim2.fromOffset(42,22)
+                bg.BackgroundColor3=CurrentTheme.Background
+                bg.BorderSizePixel=0
+                bg.Parent=b
+                makeCorner(bg,11)
+                local gs=makeStroke(bg,CurrentTheme.ElementStroke,2)
+
+                local dot=Instance.new("Frame")
+                dot.Size=UDim2.fromOffset(18,18)
+                dot.BackgroundColor3=CurrentTheme.TextColor
+                dot.BorderSizePixel=0
+                dot.Parent=bg
+                makeCorner(dot,9)
+
                 local function update(call)
                     dot.Position = data.State and UDim2.new(1,-20,0.5,-9) or UDim2.new(0,2,0.5,-9)
                     bg.BackgroundColor3 = data.State and CurrentTheme.TabBackgroundSelected or CurrentTheme.Background
-                    if call and callback then callback(data.State) end
+                    if call and callback then task.spawn(callback,data.State) end
                 end
                 update(false)
-                connectAndTrack(connections,b.MouseEnter,function() data.Hover=true; b.BackgroundColor3=CurrentTheme.ElementBackgroundHover; bs.Color=CurrentTheme.ElementStrokeHover end)
-                connectAndTrack(connections,b.MouseLeave,function() data.Hover=false; b.BackgroundColor3=CurrentTheme.ElementBackground; bs.Color=CurrentTheme.ElementStroke end)
-                connectAndTrack(connections,b.MouseButton1Click,function() data.State=not data.State; update(true) end)
+
+                connectAndTrack(connections,b.MouseEnter,function()
+                    data.Hover=true
+                    b.BackgroundColor3=CurrentTheme.ElementBackgroundHover
+                    bs.Color=CurrentTheme.ElementStrokeHover
+                end)
+                connectAndTrack(connections,b.MouseLeave,function()
+                    data.Hover=false
+                    b.BackgroundColor3=CurrentTheme.ElementBackground
+                    bs.Color=CurrentTheme.ElementStroke
+                end)
+                connectAndTrack(connections,b.MouseButton1Click,function()
+                    data.State=not data.State
+                    update(true)
+                end)
+
                 function data:Set(value) data.State=value==true; update(true) end
                 function data:Get() return data.State end
-                function data:RefreshTheme() b.BackgroundColor3=data.Hover and CurrentTheme.ElementBackgroundHover or CurrentTheme.ElementBackground; bs.Color=data.Hover and CurrentTheme.ElementStrokeHover or CurrentTheme.ElementStroke; t.TextColor3=CurrentTheme.TextColor; dot.BackgroundColor3=CurrentTheme.TextColor; gs.Color=CurrentTheme.ElementStroke; update(false) end
+                function data:RefreshTheme()
+                    b.BackgroundColor3=data.Hover and CurrentTheme.ElementBackgroundHover or CurrentTheme.ElementBackground
+                    bs.Color=data.Hover and CurrentTheme.ElementStrokeHover or CurrentTheme.ElementStroke
+                    t.TextColor3=CurrentTheme.TextColor
+                    dot.BackgroundColor3=CurrentTheme.TextColor
+                    gs.Color=CurrentTheme.ElementStroke
+                    update(false)
+                end
                 return data
             end
 
             function SectionData:Slider(label, min, max, default, callback)
-                min = tonumber(min) or 0; max = tonumber(max) or 100
+                min = tonumber(min) or 0
+                max = tonumber(max) or 100
                 if max < min then min,max=max,min end
                 local range=max-min
                 local value=math.clamp(tonumber(default) or min,min,max)
                 local data={Value=value}
-                local f=Instance.new("Frame"); f.Size=UDim2.new(1,0,0,65); f.BackgroundColor3=CurrentTheme.ElementBackground; f.BorderSizePixel=0; f.Parent=page; makeCorner(f,8); local fs=makeStroke(f,CurrentTheme.ElementStroke,2)
-                local t=Instance.new("TextLabel"); t.BackgroundTransparency=1; t.Position=UDim2.new(0,24,0,2); t.Size=UDim2.new(0.6,-24,0,28); t.Text=tostring(label or "Slider"); t.TextColor3=CurrentTheme.TextColor; t.TextScaled=true; t.TextXAlignment=Enum.TextXAlignment.Left; t.Parent=f
-                local vt=Instance.new("TextLabel"); vt.BackgroundTransparency=1; vt.Position=UDim2.new(0.6,0,0,2); vt.Size=UDim2.new(0.4,-24,0,28); vt.TextColor3=CurrentTheme.TextColor; vt.TextScaled=true; vt.TextXAlignment=Enum.TextXAlignment.Right; vt.Parent=f
-                local back=Instance.new("Frame"); back.Position=UDim2.new(0.05,0,0,43); back.Size=UDim2.new(0.9,0,0,10); back.BackgroundColor3=CurrentTheme.Background; back.BorderSizePixel=0; back.Parent=f; makeCorner(back,5); local backStroke=makeStroke(back,CurrentTheme.ElementStroke,2)
-                local fill=Instance.new("Frame"); fill.BackgroundColor3=CurrentTheme.TabBackgroundSelected; fill.BorderSizePixel=0; fill.Parent=back; makeCorner(fill,5)
+
+                local f=Instance.new("Frame")
+                f.Size=UDim2.new(1,0,0,65)
+                f.BackgroundColor3=CurrentTheme.ElementBackground
+                f.BorderSizePixel=0
+                f.Parent=page
+                makeCorner(f,8)
+                local fs=makeStroke(f,CurrentTheme.ElementStroke,2)
+
+                local t=Instance.new("TextLabel")
+                t.BackgroundTransparency=1
+                t.Position=UDim2.new(0,24,0,2)
+                t.Size=UDim2.new(0.6,-24,0,28)
+                t.Text=tostring(label or "Slider")
+                t.TextColor3=CurrentTheme.TextColor
+                t.TextScaled=true
+                t.TextXAlignment=Enum.TextXAlignment.Left
+                t.Parent=f
+
+                local vt=Instance.new("TextLabel")
+                vt.BackgroundTransparency=1
+                vt.Position=UDim2.new(0.6,0,0,2)
+                vt.Size=UDim2.new(0.4,-24,0,28)
+                vt.TextColor3=CurrentTheme.TextColor
+                vt.TextScaled=true
+                vt.TextXAlignment=Enum.TextXAlignment.Right
+                vt.Parent=f
+
+                local back=Instance.new("Frame")
+                back.Position=UDim2.new(0.05,0,0,43)
+                back.Size=UDim2.new(0.9,0,0,10)
+                back.BackgroundColor3=CurrentTheme.Background
+                back.BorderSizePixel=0
+                back.Parent=f
+                makeCorner(back,5)
+                local backStroke=makeStroke(back,CurrentTheme.ElementStroke,2)
+
+                local fill=Instance.new("Frame")
+                fill.BackgroundColor3=CurrentTheme.TabBackgroundSelected
+                fill.BorderSizePixel=0
+                fill.Parent=back
+                makeCorner(fill,5)
+
                 local dragging=false
                 local function setValue(v,call)
                     v=math.clamp(tonumber(v) or min,min,max)
                     if range==0 then v=min end
                     data.Value=v
                     local pct=range==0 and 0 or (v-min)/range
-                    fill.Size=UDim2.new(pct,0,1,0); vt.Text=tostring(v)
-                    if call and callback then callback(v) end
+                    fill.Size=UDim2.new(pct,0,1,0)
+                    vt.Text=tostring(v)
+                    if call and callback then task.spawn(callback,v) end
                 end
                 local function updateFromX(x)
                     local size=back.AbsoluteSize.X
@@ -638,12 +756,35 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                     setValue(range==0 and min or math.floor(min+range*pct+0.5),true)
                 end
                 setValue(value,false)
-                connectAndTrack(connections,back.InputBegan,function(input) if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then dragging=true; updateFromX(input.Position.X) end end)
-                connectAndTrack(connections,UserInputService.InputChanged,function(input) if dragging and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then updateFromX(input.Position.X) end end)
-                connectAndTrack(connections,UserInputService.InputEnded,function(input) if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then dragging=false end end)
+
+                connectAndTrack(connections,back.InputBegan,function(input)
+                    if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+                        dragging=true
+                        updateFromX(input.Position.X)
+                    end
+                end)
+                connectAndTrack(connections,UserInputService.InputChanged,function(input)
+                    if dragging and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then
+                        updateFromX(input.Position.X)
+                    end
+                end)
+                connectAndTrack(connections,UserInputService.InputEnded,function(input)
+                    if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+                        dragging=false
+                    end
+                end)
+
                 function data:Set(v) setValue(v,true) end
                 function data:Get() return data.Value end
-                function data:RefreshTheme() f.BackgroundColor3=CurrentTheme.ElementBackground; fs.Color=CurrentTheme.ElementStroke; t.TextColor3=CurrentTheme.TextColor; vt.TextColor3=CurrentTheme.TextColor; back.BackgroundColor3=CurrentTheme.Background; backStroke.Color=CurrentTheme.ElementStroke; fill.BackgroundColor3=CurrentTheme.TabBackgroundSelected end
+                function data:RefreshTheme()
+                    f.BackgroundColor3=CurrentTheme.ElementBackground
+                    fs.Color=CurrentTheme.ElementStroke
+                    t.TextColor3=CurrentTheme.TextColor
+                    vt.TextColor3=CurrentTheme.TextColor
+                    back.BackgroundColor3=CurrentTheme.Background
+                    backStroke.Color=CurrentTheme.ElementStroke
+                    fill.BackgroundColor3=CurrentTheme.TabBackgroundSelected
+                end
                 return data
             end
 
@@ -652,16 +793,57 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 local multi=MultiSelect==true
                 local data={Open=false,Value=nil,Values={}}
                 local buttons={}
-                local f=Instance.new("Frame"); f.Size=UDim2.new(1,0,0,45); f.BackgroundColor3=CurrentTheme.ElementBackground; f.BorderSizePixel=0; f.ClipsDescendants=true; f.Parent=page; makeCorner(f,8); local fs=makeStroke(f,CurrentTheme.ElementStroke,2)
-                local txt=Instance.new("TextLabel"); txt.BackgroundTransparency=1; txt.Position=UDim2.new(0,24,0,0); txt.Size=UDim2.new(1,-64,0,45); txt.Text=tostring(label or "Dropdown"); txt.TextColor3=CurrentTheme.TextColor; txt.TextScaled=true; txt.TextXAlignment=Enum.TextXAlignment.Left; txt.Parent=f
-                local arrow=Instance.new("TextButton"); arrow.BackgroundTransparency=1; arrow.Position=UDim2.new(1,-44,0,0); arrow.Size=UDim2.fromOffset(44,45); arrow.Text="▼"; arrow.TextColor3=CurrentTheme.TextColor; arrow.TextScaled=true; arrow.Parent=f
-                local list=Instance.new("Frame"); list.Position=UDim2.new(0,0,0,45); list.Size=UDim2.new(1,0,0,0); list.BackgroundColor3=CurrentTheme.Background; list.BorderSizePixel=0; list.Parent=f
-                local ll=Instance.new("UIListLayout"); ll.Parent=list
+
+                local f=Instance.new("Frame")
+                f.Size=UDim2.new(1,0,0,45)
+                f.BackgroundColor3=CurrentTheme.ElementBackground
+                f.BorderSizePixel=0
+                f.ClipsDescendants=true
+                f.Parent=page
+                makeCorner(f,8)
+                local fs=makeStroke(f,CurrentTheme.ElementStroke,2)
+
+                local txt=Instance.new("TextLabel")
+                txt.BackgroundTransparency=1
+                txt.Position=UDim2.new(0,24,0,0)
+                txt.Size=UDim2.new(1,-64,0,45)
+                txt.Text=tostring(label or "Dropdown")
+                txt.TextColor3=CurrentTheme.TextColor
+                txt.TextScaled=true
+                txt.TextXAlignment=Enum.TextXAlignment.Left
+                txt.Parent=f
+
+                local arrow=Instance.new("TextButton")
+                arrow.BackgroundTransparency=1
+                arrow.Position=UDim2.new(1,-44,0,0)
+                arrow.Size=UDim2.fromOffset(44,45)
+                arrow.Text="▼"
+                arrow.TextColor3=CurrentTheme.TextColor
+                arrow.TextScaled=true
+                arrow.AutoButtonColor=false
+                arrow.Parent=f
+
+                local list=Instance.new("Frame")
+                list.Position=UDim2.new(0,0,0,45)
+                list.Size=UDim2.new(1,0,0,0)
+                list.BackgroundColor3=CurrentTheme.Background
+                list.BorderSizePixel=0
+                list.Parent=f
+                local ll=Instance.new("UIListLayout")
+                ll.SortOrder=Enum.SortOrder.LayoutOrder
+                ll.Parent=list
+
                 local function selectedText()
-                    if not multi then return data.Value and (tostring(label or "Dropdown")..": "..tostring(data.Value)) or tostring(label or "Dropdown") end
-                    local selected={}; for _,o in ipairs(options) do if data.Values[o] then table.insert(selected,tostring(o)) end end
+                    if not multi then
+                        return data.Value and (tostring(label or "Dropdown")..": "..tostring(data.Value)) or tostring(label or "Dropdown")
+                    end
+                    local selected={}
+                    for _,o in ipairs(options) do
+                        if data.Values[o] then table.insert(selected,tostring(o)) end
+                    end
                     return #selected>0 and tostring(label or "Dropdown")..": "..table.concat(selected,", ") or tostring(label or "Dropdown")
                 end
+
                 local function refreshButtons()
                     for _,item in ipairs(buttons) do
                         local chosen=multi and data.Values[item.Option] or data.Value==item.Option
@@ -670,60 +852,126 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                         item.Button.TextColor3=CurrentTheme.TextColor
                     end
                 end
+
                 local function refreshSize()
                     local count=#options
                     list.Size=UDim2.new(1,0,0,data.Open and count*35 or 0)
                     f.Size=UDim2.new(1,0,0,data.Open and 45+count*35 or 45)
                     arrow.Text=data.Open and "▲" or "▼"
                 end
-                txt.Text=selectedText()
+
                 for _,option in ipairs(options) do
-                    local b=Instance.new("TextButton"); b.Size=UDim2.new(1,0,0,35); b.BackgroundColor3=CurrentTheme.ElementBackground; b.BorderSizePixel=0; b.Text=tostring(option); b.TextColor3=CurrentTheme.TextColor; b.TextScaled=true; b.Parent=list
-                    local item={Option=option,Button=b}; table.insert(buttons,item)
+                    local b=Instance.new("TextButton")
+                    b.Size=UDim2.new(1,0,0,35)
+                    b.BackgroundColor3=CurrentTheme.ElementBackground
+                    b.BorderSizePixel=0
+                    b.Text=tostring(option)
+                    b.TextColor3=CurrentTheme.TextColor
+                    b.TextScaled=true
+                    b.AutoButtonColor=false
+                    b.Parent=list
+                    local item={Option=option,Button=b}
+                    table.insert(buttons,item)
+
                     connectAndTrack(connections,b.MouseEnter,function() b.BackgroundColor3=CurrentTheme.ElementBackgroundHover end)
                     connectAndTrack(connections,b.MouseLeave,function() b.BackgroundColor3=CurrentTheme.ElementBackground end)
                     connectAndTrack(connections,b.MouseButton1Click,function()
-                        if multi then data.Values[option]=not data.Values[option] else data.Value=option; data.Open=false end
-                        txt.Text=selectedText(); refreshButtons(); refreshSize(); if callback then callback(multi and data.Values or data.Value) end
+                        if multi then
+                            data.Values[option]=not data.Values[option]
+                        else
+                            data.Value=option
+                            data.Open=false
+                        end
+                        txt.Text=selectedText()
+                        refreshButtons()
+                        refreshSize()
+                        if callback then task.spawn(callback,multi and data.Values or data.Value) end
                     end)
                 end
-                connectAndTrack(connections,arrow.MouseButton1Click,function() data.Open=not data.Open; refreshSize() end)
+
+                connectAndTrack(connections,arrow.MouseButton1Click,function()
+                    data.Open=not data.Open
+                    refreshSize()
+                end)
+
                 function data:Set(value)
                     if multi then
                         data.Values={}
-                        if type(value)=="table" then for _,o in ipairs(options) do if value[o] then data.Values[o]=true end end else if value~=nil then data.Values[value]=true end end
+                        if type(value)=="table" then
+                            for _,o in ipairs(options) do
+                                if value[o] == true then data.Values[o]=true end
+                            end
+                        elseif value~=nil then
+                            data.Values[value]=true
+                        end
                     else
-                        local valid=false; for _,o in ipairs(options) do if o==value then valid=true break end end
+                        local valid=false
+                        for _,o in ipairs(options) do
+                            if o==value then valid=true break end
+                        end
                         data.Value=valid and value or nil
                     end
-                    txt.Text=selectedText(); refreshButtons(); if callback then callback(multi and data.Values or data.Value) end
+                    txt.Text=selectedText()
+                    refreshButtons()
+                    if callback then task.spawn(callback,multi and data.Values or data.Value) end
                 end
+
                 function data:Get() return multi and data.Values or data.Value end
-                function data:Clear() data.Value=nil; data.Values={}; txt.Text=selectedText(); refreshButtons() end
-                function data:RefreshTheme() f.BackgroundColor3=CurrentTheme.ElementBackground; fs.Color=CurrentTheme.ElementStroke; txt.TextColor3=CurrentTheme.TextColor; arrow.TextColor3=CurrentTheme.TextColor; list.BackgroundColor3=CurrentTheme.Background; refreshButtons() end
-                refreshSize(); return data
+                function data:Clear()
+                    data.Value=nil
+                    data.Values={}
+                    txt.Text=selectedText()
+                    refreshButtons()
+                end
+                function data:RefreshTheme()
+                    f.BackgroundColor3=CurrentTheme.ElementBackground
+                    fs.Color=CurrentTheme.ElementStroke
+                    txt.TextColor3=CurrentTheme.TextColor
+                    arrow.TextColor3=CurrentTheme.TextColor
+                    list.BackgroundColor3=CurrentTheme.Background
+                    refreshButtons()
+                end
+
+                txt.Text=selectedText()
+                refreshSize()
+                return data
             end
 
             function SectionData:ConfigToggle(label, default, callback, key)
                 local cfgKey=key or label
                 local saved=CrackedLib.Config.Data[cfgKey]
                 local value=type(saved)=="boolean" and saved or (default==true)
-                return self:Toggle(label,value,function(v) CrackedLib.Config.Data[cfgKey]=v; CrackedLib.Config:Save(); if callback then callback(v) end end)
+                return self:Toggle(label,value,function(v)
+                    CrackedLib.Config.Data[cfgKey]=v
+                    CrackedLib.Config:Save()
+                    if callback then callback(v) end
+                end)
             end
 
             function SectionData:ConfigSlider(label,min,max,default,callback,key)
                 local cfgKey=key or label
                 local saved=CrackedLib.Config.Data[cfgKey]
                 local value=type(saved)=="number" and saved or default
-                return self:Slider(label,min,max,value,function(v) CrackedLib.Config.Data[cfgKey]=v; CrackedLib.Config:Save(); if callback then callback(v) end end)
+                return self:Slider(label,min,max,value,function(v)
+                    CrackedLib.Config.Data[cfgKey]=v
+                    CrackedLib.Config:Save()
+                    if callback then callback(v) end
+                end)
             end
 
             function SectionData:ConfigDropdown(label,options,callback,MultiSelect,key)
                 local cfgKey=key or label
                 local saved=CrackedLib.Config.Data[cfgKey]
-                local data
-                data=self:Dropdown(label,options,function(v) CrackedLib.Config.Data[cfgKey]=v; CrackedLib.Config:Save(); if callback then callback(v) end end,MultiSelect)
-                if saved~=nil then task.defer(function() if not destroyed then data:Set(saved) end end) end
+                local data=self:Dropdown(label,options,function(v)
+                    CrackedLib.Config.Data[cfgKey]=v
+                    CrackedLib.Config:Save()
+                    if callback then callback(v) end
+                end,MultiSelect)
+                if saved~=nil then
+                    task.defer(function()
+                        if not destroyed then data:Set(saved) end
+                    end)
+                end
                 return data
             end
 
@@ -779,14 +1027,24 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
         if ScreenGui then ScreenGui:Destroy() end
     end
 
+    local minimized = false
+    local normalSize = Main.Size
+
     connectAndTrack(connections,Exit.MouseButton1Click,function() GUI:Destroy() end)
-    connectAndTrack(connections,Minus.MouseButton1Click,function() Main.Visible=not Main.Visible end)
+    connectAndTrack(connections,Minus.MouseButton1Click,function()
+        minimized = not minimized
+        Navigation.Visible = not minimized
+        TabHolder.Visible = not minimized
+        Line.Visible = not minimized
+        Main.Size = minimized and UDim2.new(normalSize.X.Scale, normalSize.X.Offset, 0, 52) or normalSize
+        Minus.Text = minimized and "+" or "−"
+    end)
 
     return GUI
 end
 
 -- Optional local test from the original file, disabled by default.
-CrackedLib.Version = "2.0.0"
+CrackedLib.Version = "2.1.0"
 CrackedLib.RunStudioTest = function()
     local lib=CrackedLib:Init("CrackLib v2",true,Enum.KeyCode.RightShift,"Default",{Enabled=false})
     if not lib then return end
