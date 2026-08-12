@@ -1,4 +1,4 @@
-ocal CrackedLib = {}
+local CrackedLib = {}
 
 -- CrackedLib v2
 -- Fixed/reworked version of the supplied library.
