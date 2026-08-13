@@ -1,12 +1,15 @@
 local CrackedLib = {}
 
--- CrackedLib v2.1.1
+-- CrackedLib v2.1.2
 -- Fixed/reworked version of the supplied library.
 -- Fixes applied:
 --   - Critical: Section() now correctly returns SectionData (was returning TabData)
 --   - Removed duplicate fsAvailable definition
 --   - Cleaned indentation of Config* helpers and GUI config methods
 --   - Removed broken recursive GUI.Destroy stub
+--   - ConfigToggle / ConfigSlider / ConfigDropdown / ConfigColorPicker now
+--     fire their callback once on load with the restored value (so loops
+--     and features actually start after a config load)
 -- Preserves the public API: Init, CreateTab, Section, Button, Label,
 -- Toggle, Slider, Dropdown, ColorPicker, ConfigToggle, ConfigSlider,
 -- ConfigDropdown, ConfigColorPicker.
@@ -1333,6 +1336,13 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                     CrackedLib.Config:Save()
                 end
 
+                -- Fire callback once with the loaded value
+                if callback then
+                    task.defer(function()
+                        callback(initial)
+                    end)
+                end
+
                 return data
             end
 
@@ -1356,6 +1366,13 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                         callback(v)
                     end
                 end)
+
+                -- Fire callback once with the loaded value so features actually start
+                if callback then
+                    task.defer(function()
+                        callback(value)
+                    end)
+                end
 
                 return data
             end
@@ -1382,7 +1399,13 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                     task.defer(function()
                         if data then
                             data:Set(saved)
+                            -- data:Set already fires the callback, so no extra call needed
                         end
+                    end)
+                elseif callback then
+                    -- No saved value, still fire once with current (nil / empty) state
+                    task.defer(function()
+                        callback(data:Get())
                     end)
                 end
 
@@ -1418,6 +1441,13 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                         callback(v)
                     end
                 end)
+
+                -- Fire callback once with the loaded value
+                if callback then
+                    task.defer(function()
+                        callback(value)
+                    end)
+                end
 
                 return data
             end
@@ -1505,7 +1535,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 end
 
 -- Optional local test from the original file, disabled by default.
-CrackedLib.Version = "2.1.1"
+CrackedLib.Version = "2.1.2"
 CrackedLib.RunStudioTest = function()
     local lib=CrackedLib:Init("CrackLib v2",true,Enum.KeyCode.RightShift,"Default",{Enabled=false})
     if not lib then return end
