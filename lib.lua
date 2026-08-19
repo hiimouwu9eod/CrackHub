@@ -1,6 +1,6 @@
 local CrackedLib = {}
 
--- CrackedLib v2.1.2
+-- CrackedLib v2.2.0
 -- Fixed/reworked version of the supplied library.
 -- Fixes applied:
 --   - Critical: Section() now correctly returns SectionData (was returning TabData)
@@ -10,9 +10,10 @@ local CrackedLib = {}
 --   - ConfigToggle / ConfigSlider / ConfigDropdown / ConfigColorPicker now
 --     fire their callback once on load with the restored value (so loops
 --     and features actually start after a config load)
--- Preserves the public API: Init, CreateTab, Section, Button, Label,
--- Toggle, Slider, Dropdown, ColorPicker, ConfigToggle, ConfigSlider,
--- ConfigDropdown, ConfigColorPicker.
+-- Public API: Init, CreateTab, Section, Button, Label, TextBox,
+-- Toggle, Slider, Dropdown, ToggleList, ColorPicker,
+-- ConfigToggle, ConfigSlider, ConfigDropdown, ConfigColorPicker, ConfigTextBox.
+-- Dropdown supports :Refresh / :Add / :Remove / :GetOptions.
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -702,74 +703,97 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
             end
 
             function SectionData:TextBox(placeholder, default, callback)
-    local data = {}
-    local page = page -- your section content parent (same as Label)
+                local data = {}
+                local f = Instance.new("Frame")
+                f.Size = UDim2.new(1, 0, 0, 45)
+                f.BackgroundColor3 = CurrentTheme.ElementBackground
+                f.BorderSizePixel = 0
+                f.Parent = page
+                makeCorner(f, 8)
+                local s = makeStroke(f, CurrentTheme.ElementStroke, 2)
 
-    local f = Instance.new("Frame")
-    f.Size = UDim2.new(1, 0, 0, 45)
-    f.BackgroundColor3 = CurrentTheme.ElementBackground
-    f.BorderSizePixel = 0
-    f.Parent = page
-    makeCorner(f, 8)
-    local s = makeStroke(f, CurrentTheme.ElementStroke, 2)
+                local box = Instance.new("TextBox")
+                box.BackgroundTransparency = 1
+                box.Size = UDim2.new(1, -24, 1, 0)
+                box.Position = UDim2.new(0, 12, 0, 0)
+                box.Text = tostring(default or "")
+                box.PlaceholderText = tostring(placeholder or "Enter text...")
+                box.PlaceholderColor3 = Color3.fromRGB(140, 140, 150)
+                box.TextColor3 = CurrentTheme.TextColor
+                box.TextScaled = true
+                box.TextWrapped = false
+                box.ClearTextOnFocus = false
+                box.TextXAlignment = Enum.TextXAlignment.Left
+                box.Font = Enum.Font.Gotham
+                box.Parent = f
 
-    local box = Instance.new("TextBox")
-    box.BackgroundTransparency = 1
-    box.Size = UDim2.new(1, -24, 1, 0)
-    box.Position = UDim2.new(0, 12, 0, 0)
-    box.Text = tostring(default or "")
-    box.PlaceholderText = tostring(placeholder or "Enter text...")
-    box.PlaceholderColor3 = Color3.fromRGB(140, 140, 150)
-    box.TextColor3 = CurrentTheme.TextColor
-    box.TextScaled = true
-    box.TextWrapped = false
-    box.ClearTextOnFocus = false
-    box.TextXAlignment = Enum.TextXAlignment.Left
-    box.Font = Enum.Font.Gotham
-    box.Parent = f
+                local pad = Instance.new("UIPadding")
+                pad.PaddingLeft = UDim.new(0, 4)
+                pad.PaddingRight = UDim.new(0, 4)
+                pad.PaddingTop = UDim.new(0, 8)
+                pad.PaddingBottom = UDim.new(0, 8)
+                pad.Parent = box
 
-    local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 4)
-    pad.PaddingRight = UDim.new(0, 4)
-    pad.PaddingTop = UDim.new(0, 8)
-    pad.PaddingBottom = UDim.new(0, 8)
-    pad.Parent = box
+                local function fire()
+                    if callback then
+                        task.spawn(callback, box.Text)
+                    end
+                end
 
-    local function fire()
-        if callback then
-            pcall(callback, box.Text)
-        end
-    end
+                connectAndTrack(connections, box.FocusLost, function(enter)
+                    fire()
+                end)
 
-    box.FocusLost:Connect(function(enter)
-        fire()
-    end)
+                function data:SetText(value)
+                    box.Text = tostring(value or "")
+                end
+                function data:GetText()
+                    return box.Text
+                end
+                function data:Get()
+                    return box.Text
+                end
+                function data:Set(value)
+                    box.Text = tostring(value or "")
+                    fire()
+                end
+                function data:SetPlaceholder(value)
+                    box.PlaceholderText = tostring(value or "")
+                end
+                function data:RefreshTheme()
+                    f.BackgroundColor3 = CurrentTheme.ElementBackground
+                    s.Color = CurrentTheme.ElementStroke
+                    box.TextColor3 = CurrentTheme.TextColor
+                end
+                return data
+            end
 
-    -- live update optional
-    box:GetPropertyChangedSignal("Text"):Connect(function()
-        -- don't spam callback every keystroke unless you want it
-    end)
+            function SectionData:ConfigTextBox(placeholder, default, callback, key)
+                local cfgKey = key or placeholder
+                local saved = CrackedLib.Config.Data[cfgKey]
+                local initial = type(saved) == "string" and saved or tostring(default or "")
 
-    function data:SetText(value)
-        box.Text = tostring(value or "")
-    end
+                local data = self:TextBox(placeholder, initial, function(text)
+                    CrackedLib.Config.Data[cfgKey] = text
+                    CrackedLib.Config:Save()
+                    if callback then
+                        callback(text)
+                    end
+                end)
 
-    function data:GetText()
-        return box.Text
-    end
+                if saved == nil then
+                    CrackedLib.Config.Data[cfgKey] = initial
+                    CrackedLib.Config:Save()
+                end
 
-    function data:SetPlaceholder(value)
-        box.PlaceholderText = tostring(value or "")
-    end
+                if callback then
+                    task.defer(function()
+                        callback(initial)
+                    end)
+                end
 
-    function data:RefreshTheme()
-        f.BackgroundColor3 = CurrentTheme.ElementBackground
-        s.Color = CurrentTheme.ElementStroke
-        box.TextColor3 = CurrentTheme.TextColor
-    end
-
-    return data
-end
+                return data
+            end
 
             function SectionData:Toggle(label, state, callback)
                 local data = {State = state == true, Hover=false}
@@ -1015,46 +1039,76 @@ end
                     arrow.Text=data.Open and "▲" or "▼"
                 end
 
-                for _,option in ipairs(options) do
-                    local b=Instance.new("TextButton")
-                    b.Size=UDim2.new(1,0,0,35)
-                    b.BackgroundColor3=CurrentTheme.ElementBackground
-                    b.BorderSizePixel=0
-                    b.Text=tostring(option)
-                    b.TextColor3=CurrentTheme.TextColor
-                    b.TextScaled=true
-                    b.AutoButtonColor=false
-                    b.Parent=list
-                    local item={Option=option,Button=b}
-                    table.insert(buttons,item)
-
-                    connectAndTrack(connections,b.MouseEnter,function() b.BackgroundColor3=CurrentTheme.ElementBackgroundHover end)
-                    connectAndTrack(connections,b.MouseLeave,function() b.BackgroundColor3=CurrentTheme.ElementBackground end)
-                    connectAndTrack(connections,b.MouseButton1Click,function()
-                        if multi then
-                            data.Values[option]=not data.Values[option]
-                        else
-                            data.Value=option
-                            data.Open=false
-                        end
-                        txt.Text=selectedText()
-                        refreshButtons()
-                        refreshSize()
-                        if callback then task.spawn(callback,multi and data.Values or data.Value) end
-                    end)
+                local function clearButtons()
+                    for _,item in ipairs(buttons) do
+                        if item.Button then item.Button:Destroy() end
+                    end
+                    table.clear(buttons)
                 end
+
+                local function buildButtons()
+                    clearButtons()
+                    for _,option in ipairs(options) do
+                        local b=Instance.new("TextButton")
+                        b.Size=UDim2.new(1,0,0,35)
+                        b.BackgroundColor3=CurrentTheme.ElementBackground
+                        b.BorderSizePixel=0
+                        b.Text=tostring(option)
+                        b.TextColor3=CurrentTheme.TextColor
+                        b.TextScaled=true
+                        b.AutoButtonColor=false
+                        b.Parent=list
+                        local item={Option=option,Button=b}
+                        table.insert(buttons,item)
+
+                        connectAndTrack(connections,b.MouseEnter,function() b.BackgroundColor3=CurrentTheme.ElementBackgroundHover end)
+                        connectAndTrack(connections,b.MouseLeave,function() b.BackgroundColor3=CurrentTheme.ElementBackground end)
+                        connectAndTrack(connections,b.MouseButton1Click,function()
+                            if multi then
+                                data.Values[option]=not data.Values[option]
+                            else
+                                data.Value=option
+                                data.Open=false
+                            end
+                            txt.Text=selectedText()
+                            refreshButtons()
+                            refreshSize()
+                            if callback then task.spawn(callback,multi and data.Values or data.Value) end
+                        end)
+                    end
+                    refreshButtons()
+                    refreshSize()
+                end
+
+                buildButtons()
 
                 connectAndTrack(connections,arrow.MouseButton1Click,function()
                     data.Open=not data.Open
                     refreshSize()
+                end)
+                -- also open by clicking label area
+                connectAndTrack(connections,txt.InputBegan,function(input)
+                    if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+                        data.Open=not data.Open
+                        refreshSize()
+                    end
                 end)
 
                 function data:Set(value)
                     if multi then
                         data.Values={}
                         if type(value)=="table" then
-                            for _,o in ipairs(options) do
-                                if value[o] == true then data.Values[o]=true end
+                            -- support both {opt=true} and {opt1,opt2}
+                            local isList=true
+                            for k,_ in pairs(value) do
+                                if type(k)~="number" then isList=false break end
+                            end
+                            if isList then
+                                for _,o in ipairs(value) do data.Values[o]=true end
+                            else
+                                for _,o in ipairs(options) do
+                                    if value[o]==true then data.Values[o]=true end
+                                end
                             end
                         elseif value~=nil then
                             data.Values[value]=true
@@ -1072,12 +1126,69 @@ end
                 end
 
                 function data:Get() return multi and data.Values or data.Value end
+
                 function data:Clear()
                     data.Value=nil
                     data.Values={}
                     txt.Text=selectedText()
                     refreshButtons()
                 end
+
+                -- Rebuild option list at runtime (player lists, etc.)
+                function data:Refresh(newOptions, keepSelection)
+                    options = type(newOptions)=="table" and newOptions or {}
+                    if not keepSelection then
+                        data.Value=nil
+                        data.Values={}
+                    else
+                        -- drop selections that no longer exist
+                        if multi then
+                            local nextVals={}
+                            for _,o in ipairs(options) do
+                                if data.Values[o] then nextVals[o]=true end
+                            end
+                            data.Values=nextVals
+                        else
+                            local ok=false
+                            for _,o in ipairs(options) do
+                                if o==data.Value then ok=true break end
+                            end
+                            if not ok then data.Value=nil end
+                        end
+                    end
+                    buildButtons()
+                    txt.Text=selectedText()
+                end
+
+                function data:Add(option)
+                    if option==nil then return end
+                    for _,o in ipairs(options) do
+                        if o==option then return end
+                    end
+                    table.insert(options, option)
+                    buildButtons()
+                    txt.Text=selectedText()
+                end
+
+                function data:Remove(option)
+                    for i,o in ipairs(options) do
+                        if o==option then
+                            table.remove(options, i)
+                            break
+                        end
+                    end
+                    if multi then data.Values[option]=nil
+                    elseif data.Value==option then data.Value=nil end
+                    buildButtons()
+                    txt.Text=selectedText()
+                end
+
+                function data:GetOptions()
+                    local copy={}
+                    for i,o in ipairs(options) do copy[i]=o end
+                    return copy
+                end
+
                 function data:RefreshTheme()
                     f.BackgroundColor3=CurrentTheme.ElementBackground
                     fs.Color=CurrentTheme.ElementStroke
@@ -1089,6 +1200,196 @@ end
 
                 txt.Text=selectedText()
                 refreshSize()
+                return data
+            end
+
+            -- Dropdown of toggles: each option is an independent on/off switch
+            -- callback(option, state, allStates)
+            function SectionData:ToggleList(label, options, callback, defaults)
+                options = type(options)=="table" and options or {}
+                defaults = type(defaults)=="table" and defaults or {}
+                local data={Open=false, States={}}
+                local buttons={}
+
+                for _,o in ipairs(options) do
+                    data.States[o] = defaults[o]==true
+                end
+
+                local f=Instance.new("Frame")
+                f.Size=UDim2.new(1,0,0,45)
+                f.BackgroundColor3=CurrentTheme.ElementBackground
+                f.BorderSizePixel=0
+                f.ClipsDescendants=true
+                f.Parent=page
+                makeCorner(f,8)
+                local fs=makeStroke(f,CurrentTheme.ElementStroke,2)
+
+                local txt=Instance.new("TextLabel")
+                txt.BackgroundTransparency=1
+                txt.Position=UDim2.new(0,24,0,0)
+                txt.Size=UDim2.new(1,-64,0,45)
+                txt.Text=tostring(label or "Toggles")
+                txt.TextColor3=CurrentTheme.TextColor
+                txt.TextScaled=true
+                txt.TextXAlignment=Enum.TextXAlignment.Left
+                txt.Parent=f
+
+                local arrow=Instance.new("TextButton")
+                arrow.BackgroundTransparency=1
+                arrow.Position=UDim2.new(1,-44,0,0)
+                arrow.Size=UDim2.fromOffset(44,45)
+                arrow.Text="▼"
+                arrow.TextColor3=CurrentTheme.TextColor
+                arrow.TextScaled=true
+                arrow.AutoButtonColor=false
+                arrow.Parent=f
+
+                local list=Instance.new("Frame")
+                list.Position=UDim2.new(0,0,0,45)
+                list.Size=UDim2.new(1,0,0,0)
+                list.BackgroundColor3=CurrentTheme.Background
+                list.BorderSizePixel=0
+                list.Parent=f
+                local ll=Instance.new("UIListLayout")
+                ll.SortOrder=Enum.SortOrder.LayoutOrder
+                ll.Parent=list
+
+                local function summaryText()
+                    local on={}
+                    for _,o in ipairs(options) do
+                        if data.States[o] then table.insert(on, tostring(o)) end
+                    end
+                    if #on==0 then return tostring(label or "Toggles") end
+                    return tostring(label or "Toggles")..": "..table.concat(on, ", ")
+                end
+
+                local function refreshSize()
+                    local count=#options
+                    list.Size=UDim2.new(1,0,0,data.Open and count*40 or 0)
+                    f.Size=UDim2.new(1,0,0,data.Open and 45+count*40 or 45)
+                    arrow.Text=data.Open and "▲" or "▼"
+                end
+
+                local function clearButtons()
+                    for _,item in ipairs(buttons) do
+                        if item.Row then item.Row:Destroy() end
+                    end
+                    table.clear(buttons)
+                end
+
+                local function buildButtons()
+                    clearButtons()
+                    for _,option in ipairs(options) do
+                        local row=Instance.new("TextButton")
+                        row.Size=UDim2.new(1,0,0,40)
+                        row.BackgroundColor3=CurrentTheme.ElementBackground
+                        row.BorderSizePixel=0
+                        row.Text=""
+                        row.AutoButtonColor=false
+                        row.Parent=list
+
+                        local name=Instance.new("TextLabel")
+                        name.BackgroundTransparency=1
+                        name.Position=UDim2.new(0,12,0,0)
+                        name.Size=UDim2.new(1,-70,1,0)
+                        name.Text=tostring(option)
+                        name.TextColor3=CurrentTheme.TextColor
+                        name.TextScaled=true
+                        name.TextXAlignment=Enum.TextXAlignment.Left
+                        name.Parent=row
+
+                        local knob=Instance.new("Frame")
+                        knob.AnchorPoint=Vector2.new(1,0.5)
+                        knob.Position=UDim2.new(1,-12,0.5,0)
+                        knob.Size=UDim2.fromOffset(42,22)
+                        knob.BorderSizePixel=0
+                        knob.Parent=row
+                        makeCorner(knob,11)
+                        local ks=makeStroke(knob,CurrentTheme.ElementStroke,1)
+
+                        local dot=Instance.new("Frame")
+                        dot.Size=UDim2.fromOffset(16,16)
+                        dot.AnchorPoint=Vector2.new(0,0.5)
+                        dot.Position=UDim2.new(0,3,0.5,0)
+                        dot.BorderSizePixel=0
+                        dot.BackgroundColor3=Color3.new(1,1,1)
+                        dot.Parent=knob
+                        makeCorner(dot,8)
+
+                        local function paint()
+                            local on=data.States[option]==true
+                            knob.BackgroundColor3=on and CurrentTheme.TabBackgroundSelected or CurrentTheme.Background
+                            dot.Position=on and UDim2.new(1,-19,0.5,0) or UDim2.new(0,3,0.5,0)
+                        end
+                        paint()
+
+                        local function toggle()
+                            data.States[option]=not data.States[option]
+                            paint()
+                            txt.Text=summaryText()
+                            if callback then
+                                task.spawn(callback, option, data.States[option], data.States)
+                            end
+                        end
+
+                        connectAndTrack(connections,row.MouseButton1Click,toggle)
+                        connectAndTrack(connections,row.MouseEnter,function() row.BackgroundColor3=CurrentTheme.ElementBackgroundHover end)
+                        connectAndTrack(connections,row.MouseLeave,function() row.BackgroundColor3=CurrentTheme.ElementBackground end)
+
+                        table.insert(buttons,{Option=option,Row=row,Paint=paint})
+                    end
+                    refreshSize()
+                    txt.Text=summaryText()
+                end
+
+                buildButtons()
+
+                connectAndTrack(connections,arrow.MouseButton1Click,function()
+                    data.Open=not data.Open
+                    refreshSize()
+                end)
+
+                function data:Get() return data.States end
+                function data:Set(option, state)
+                    if option==nil then return end
+                    data.States[option]=state==true
+                    for _,item in ipairs(buttons) do
+                        if item.Option==option and item.Paint then item.Paint() end
+                    end
+                    txt.Text=summaryText()
+                end
+                function data:SetAll(map)
+                    if type(map)~="table" then return end
+                    for _,o in ipairs(options) do
+                        data.States[o]=map[o]==true
+                    end
+                    for _,item in ipairs(buttons) do
+                        if item.Paint then item.Paint() end
+                    end
+                    txt.Text=summaryText()
+                end
+                function data:Refresh(newOptions, newDefaults)
+                    options=type(newOptions)=="table" and newOptions or {}
+                    local nextStates={}
+                    for _,o in ipairs(options) do
+                        if newDefaults and newDefaults[o]~=nil then
+                            nextStates[o]=newDefaults[o]==true
+                        else
+                            nextStates[o]=data.States[o]==true
+                        end
+                    end
+                    data.States=nextStates
+                    buildButtons()
+                end
+                function data:RefreshTheme()
+                    f.BackgroundColor3=CurrentTheme.ElementBackground
+                    fs.Color=CurrentTheme.ElementStroke
+                    txt.TextColor3=CurrentTheme.TextColor
+                    arrow.TextColor3=CurrentTheme.TextColor
+                    list.BackgroundColor3=CurrentTheme.Background
+                    buildButtons()
+                end
+
                 return data
             end
 
@@ -1605,7 +1906,7 @@ end
 end
 
 -- Optional local test from the original file, disabled by default.
-CrackedLib.Version = "2.1.2"
+CrackedLib.Version = "2.2.0"
 CrackedLib.RunStudioTest = function()
     local lib=CrackedLib:Init("CrackLib v2",true,Enum.KeyCode.RightShift,"Default",{Enabled=false})
     if not lib then return end
@@ -1617,7 +1918,12 @@ CrackedLib.RunStudioTest = function()
     section:Slider("Value",0,100,50,function(v) print("Slider:",v) end)
     section:Dropdown("Items",{"Sword","Potion","Shield"},function(v) print("Dropdown:",v) end,false)
     section:Dropdown("Multi",{"Sword","Potion","Shield"},function(v) print("Multi:",v) end,true)
+    section:TextBox("Webhook URL", "", function(v) print("TextBox:", v) end)
+    section:ToggleList("ESP Roles", {"Innocent","Sheriff","Murderer"}, function(opt, state, all)
+        print("ToggleList:", opt, state)
+    end, {Innocent=true})
+    local dd = section:Dropdown("Refreshable", {"A","B"}, function(v) print(v) end, false)
+    section:Button("Refresh DD", function() dd:Refresh({"X","Y","Z"}, true) end)
     return lib
 end
 
-return CrackedLib
