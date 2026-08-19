@@ -701,6 +701,76 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 return data
             end
 
+            function SectionData:TextBox(placeholder, default, callback)
+    local data = {}
+    local page = page -- your section content parent (same as Label)
+
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 45)
+    f.BackgroundColor3 = CurrentTheme.ElementBackground
+    f.BorderSizePixel = 0
+    f.Parent = page
+    makeCorner(f, 8)
+    local s = makeStroke(f, CurrentTheme.ElementStroke, 2)
+
+    local box = Instance.new("TextBox")
+    box.BackgroundTransparency = 1
+    box.Size = UDim2.new(1, -24, 1, 0)
+    box.Position = UDim2.new(0, 12, 0, 0)
+    box.Text = tostring(default or "")
+    box.PlaceholderText = tostring(placeholder or "Enter text...")
+    box.PlaceholderColor3 = Color3.fromRGB(140, 140, 150)
+    box.TextColor3 = CurrentTheme.TextColor
+    box.TextScaled = true
+    box.TextWrapped = false
+    box.ClearTextOnFocus = false
+    box.TextXAlignment = Enum.TextXAlignment.Left
+    box.Font = Enum.Font.Gotham
+    box.Parent = f
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 4)
+    pad.PaddingRight = UDim.new(0, 4)
+    pad.PaddingTop = UDim.new(0, 8)
+    pad.PaddingBottom = UDim.new(0, 8)
+    pad.Parent = box
+
+    local function fire()
+        if callback then
+            pcall(callback, box.Text)
+        end
+    end
+
+    box.FocusLost:Connect(function(enter)
+        fire()
+    end)
+
+    -- live update optional
+    box:GetPropertyChangedSignal("Text"):Connect(function()
+        -- don't spam callback every keystroke unless you want it
+    end)
+
+    function data:SetText(value)
+        box.Text = tostring(value or "")
+    end
+
+    function data:GetText()
+        return box.Text
+    end
+
+    function data:SetPlaceholder(value)
+        box.PlaceholderText = tostring(value or "")
+    end
+
+    function data:RefreshTheme()
+        f.BackgroundColor3 = CurrentTheme.ElementBackground
+        s.Color = CurrentTheme.ElementStroke
+        box.TextColor3 = CurrentTheme.TextColor
+    end
+
+    return data
+end
+
             function SectionData:Toggle(label, state, callback)
                 local data = {State = state == true, Hover=false}
                 local b = Instance.new("TextButton")
