@@ -244,13 +244,39 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
     local CurrentTheme = self.Theme[theme] or self.Theme.Default
     self.CurrentTheme = CurrentTheme
 
-    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local function getGuiParent()
+        local ok, hui = pcall(function()
+            if type(gethui) == "function" then
+                return gethui()
+            end
+            return nil
+        end)
+        if ok and hui then return hui end
+        local cg = game:GetService("CoreGui")
+        if cg then
+            local ok2 = pcall(function()
+                local t = Instance.new("Folder")
+                t.Parent = cg
+                t:Destroy()
+            end)
+            if ok2 then return cg end
+        end
+        return LocalPlayer:WaitForChild("PlayerGui")
+    end
+
+    local GuiParent = getGuiParent()
     local connections = {}
     local destroyed = false
 
-    -- Remove an older instance created by this library.
-    local old = PlayerGui:FindFirstChild("CrackLib")
-    if old then old:Destroy() end
+    -- Remove older instances from common parents
+    for _, parent in ipairs({GuiParent, game:GetService("CoreGui"), LocalPlayer:FindFirstChild("PlayerGui")}) do
+        if parent then
+            local old = parent:FindFirstChild("CrackLib")
+            if old then pcall(function() old:Destroy() end) end
+            local oldKey = parent:FindFirstChild("KeySystem")
+            if oldKey then pcall(function() oldKey:Destroy() end) end
+        end
+    end
 
     -- Key system: accepts the documented table. A legacy boolean is treated as disabled
     -- instead of silently hanging Init().
@@ -265,7 +291,8 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
         KeySystem.ResetOnSpawn = false
         KeySystem.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         KeySystem.IgnoreGuiInset = true
-        KeySystem.Parent = PlayerGui
+        KeySystem.DisplayOrder = 999999
+        KeySystem.Parent = GuiParent
 
         local KM = Instance.new("Frame")
         KM.Size = UDim2.fromScale(0.49, 0.36)
@@ -389,7 +416,9 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.IgnoreGuiInset = true
-    ScreenGui.Parent = PlayerGui
+    ScreenGui.DisplayOrder = 999999
+    ScreenGui.Enabled = true
+    ScreenGui.Parent = GuiParent
 
     local Main = Instance.new("Frame")
     Main.Name = "Main"
@@ -1902,6 +1931,16 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
         return CrackedLib.Config.Data
     end
 
+    function GUI:Show()
+        ScreenGui.Enabled = true
+    end
+
+    function GUI:Hide()
+        ScreenGui.Enabled = false
+    end
+
+    ScreenGui.Enabled = true
+    print("[CrackedLib] UI loaded | parent:", ScreenGui.Parent and ScreenGui.Parent:GetFullName() or "nil")
     return GUI
 end
 
@@ -1927,3 +1966,4 @@ CrackedLib.RunStudioTest = function()
     return lib
 end
 
+return CrackedLib
