@@ -1,19 +1,8 @@
 local CrackedLib = {}
 
--- CrackedLib v2.2.0
--- Fixed/reworked version of the supplied library.
--- Fixes applied:
---   - Critical: Section() now correctly returns SectionData (was returning TabData)
---   - Removed duplicate fsAvailable definition
---   - Cleaned indentation of Config* helpers and GUI config methods
---   - Removed broken recursive GUI.Destroy stub
---   - ConfigToggle / ConfigSlider / ConfigDropdown / ConfigColorPicker now
---     fire their callback once on load with the restored value (so loops
---     and features actually start after a config load)
--- Public API: Init, CreateTab, Section, Button, Label, TextBox,
--- Toggle, Slider, Dropdown, ToggleList, ColorPicker,
--- ConfigToggle, ConfigSlider, ConfigDropdown, ConfigColorPicker, ConfigTextBox.
--- Dropdown supports :Refresh / :Add / :Remove / :GetOptions.
+-- CrackedLib v2.3.0
+-- Added: Multi Dropdown improvements, :Destroy(), :ChangeOptions(),
+-- Keybind, Separator, Paragraph, Notification system
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -98,7 +87,6 @@ CrackedLib.Theme = {
     }
 }
 
--- Filesystem-backed config is optional. Never let a missing executor API break the UI.
 local function fsAvailable()
     return type(writefile) == "function"
         and type(readfile) == "function"
@@ -115,7 +103,6 @@ function CrackedLib.Config:GetPath()
     if type(makefolder) == "function" then
         return self.Folder .. "/" .. self.FileName
     end
-
     return self.FileName
 end
 
@@ -124,74 +111,43 @@ function CrackedLib.Config:Save()
         warn("[CrackedLib] Filesystem functions are unavailable.")
         return false
     end
-
     local path = self:GetPath()
-
     if type(makefolder) == "function" and type(isfolder) == "function" then
         pcall(function()
-            if not isfolder(self.Folder) then
-                makefolder(self.Folder)
-            end
+            if not isfolder(self.Folder) then makefolder(self.Folder) end
         end)
     elseif type(makefolder) == "function" then
-        pcall(function()
-            makefolder(self.Folder)
-        end)
+        pcall(function() makefolder(self.Folder) end)
     end
-
     local success, err = pcall(function()
-        local encoded = HttpService:JSONEncode(self.Data)
-        writefile(path, encoded)
+        writefile(path, HttpService:JSONEncode(self.Data))
     end)
-
     if not success then
         warn("[CrackedLib] Failed to save config:", err)
         return false
     end
-
-    print("[CrackedLib] Config saved:", path)
     return true
 end
 
 function CrackedLib.Config:Load()
-    if not fsAvailable() then
-        warn("[CrackedLib] Filesystem functions are unavailable.")
-        return false
-    end
-
+    if not fsAvailable() then return false end
     local path = self:GetPath()
-
     local exists = false
-
-    pcall(function()
-        exists = isfile(path)
-    end)
-
+    pcall(function() exists = isfile(path) end)
     if not exists then
         self.Data = {}
-        print("[CrackedLib] No config found.")
         return false
     end
-
     local success, result = pcall(function()
         local raw = readfile(path)
-
-        if not raw or raw == "" then
-            return {}
-        end
-
+        if not raw or raw == "" then return {} end
         return HttpService:JSONDecode(raw)
     end)
-
     if not success or type(result) ~= "table" then
-        warn("[CrackedLib] Failed to load config.")
         self.Data = {}
         return false
     end
-
     self.Data = result
-
-    print("[CrackedLib] Config loaded:", path)
     return true
 end
 
@@ -231,10 +187,20 @@ local function disconnectAll(connections)
     table.clear(connections)
 end
 
+local function destroyElement(data)
+    if not data then return end
+    if data._frame and data._frame.Parent then
+        data._frame:Destroy()
+    end
+    if data._connections then
+        disconnectAll(data._connections)
+    end
+    data._destroyed = true
+end
+
 local function copyText(text)
     if type(setclipboard) == "function" then
-        local ok = pcall(setclipboard, text)
-        return ok
+        return pcall(setclipboard, text)
     end
     return false
 end
@@ -246,9 +212,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 
     local function getGuiParent()
         local ok, hui = pcall(function()
-            if type(gethui) == "function" then
-                return gethui()
-            end
+            if type(gethui) == "function" then return gethui() end
             return nil
         end)
         if ok and hui then return hui end
@@ -268,7 +232,6 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
     local connections = {}
     local destroyed = false
 
-    -- Remove older instances from common parents
     for _, parent in ipairs({GuiParent, game:GetService("CoreGui"), LocalPlayer:FindFirstChild("PlayerGui")}) do
         if parent then
             local old = parent:FindFirstChild("CrackLib")
@@ -278,8 +241,6 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
         end
     end
 
-    -- Key system: accepts the documented table. A legacy boolean is treated as disabled
-    -- instead of silently hanging Init().
     if type(keysystem) == "table" and keysystem.Enabled then
         local Key = tostring(keysystem.Key or "")
         local CopyLink = tostring(keysystem.copyLink or "")
@@ -558,9 +519,6 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
         connectAndTrack(connections, Tab.MouseButton1Click, function() selectTab(info) end)
         if not selectedTab then selectTab(info) end
 
-        -- Shared section navigation/content area for this tab.
-        -- Each Section gets its own button and page; pages are not nested inside
-        -- a 42px-high section frame (the old implementation clipped all controls).
         local sectionBar = Instance.new("Frame")
         sectionBar.Name = "SectionBar"
         sectionBar.Position = UDim2.new(0,0,0,0)
@@ -657,8 +615,9 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 selectSection(sInfo)
             end
 
+            -- ==================== BUTTON ====================
             function SectionData:Button(label, callback)
-                local data = {Hover=false}
+                local data = {Hover=false, _connections={}}
                 local b = Instance.new("TextButton")
                 b.Size = UDim2.new(1,0,0,45)
                 b.BackgroundColor3 = CurrentTheme.ElementBackground
@@ -668,6 +627,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 b.Parent = page
                 makeCorner(b,8)
                 local bs = makeStroke(b,CurrentTheme.ElementStroke,2)
+                data._frame = b
 
                 local t = Instance.new("TextLabel")
                 t.BackgroundTransparency = 1
@@ -679,20 +639,21 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 t.TextXAlignment = Enum.TextXAlignment.Left
                 t.Parent = b
 
-                connectAndTrack(connections,b.MouseEnter,function()
+                connectAndTrack(data._connections,b.MouseEnter,function()
                     data.Hover=true
                     b.BackgroundColor3=CurrentTheme.ElementBackgroundHover
                     bs.Color=CurrentTheme.ElementStrokeHover
                 end)
-                connectAndTrack(connections,b.MouseLeave,function()
+                connectAndTrack(data._connections,b.MouseLeave,function()
                     data.Hover=false
                     b.BackgroundColor3=CurrentTheme.ElementBackground
                     bs.Color=CurrentTheme.ElementStroke
                 end)
-                connectAndTrack(connections,b.MouseButton1Click,function()
+                connectAndTrack(data._connections,b.MouseButton1Click,function()
                     if callback then task.spawn(callback) end
                 end)
 
+                function data:Destroy() destroyElement(data) end
                 function data:RefreshTheme()
                     b.BackgroundColor3=data.Hover and CurrentTheme.ElementBackgroundHover or CurrentTheme.ElementBackground
                     bs.Color=data.Hover and CurrentTheme.ElementStrokeHover or CurrentTheme.ElementStroke
@@ -701,8 +662,9 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 return data
             end
 
+            -- ==================== LABEL ====================
             function SectionData:Label(label)
-                local data = {}
+                local data = {_connections={}}
                 local f = Instance.new("Frame")
                 f.Size = UDim2.new(1,0,0,45)
                 f.BackgroundColor3 = CurrentTheme.ElementBackground
@@ -710,6 +672,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 f.Parent = page
                 makeCorner(f,8)
                 local s = makeStroke(f,CurrentTheme.ElementStroke,2)
+                data._frame = f
 
                 local t = Instance.new("TextLabel")
                 t.BackgroundTransparency = 1
@@ -723,6 +686,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 t.Parent = f
 
                 function data:SetText(value) t.Text=tostring(value) end
+                function data:Destroy() destroyElement(data) end
                 function data:RefreshTheme()
                     f.BackgroundColor3=CurrentTheme.ElementBackground
                     s.Color=CurrentTheme.ElementStroke
@@ -731,64 +695,100 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 return data
             end
 
-            function SectionData:TextBox(placeholder, default, callback)
-                local data = {}
+            -- ==================== PARAGRAPH ====================
+            function SectionData:Paragraph(text)
+                local data = {_connections={}}
                 local f = Instance.new("Frame")
-                f.Size = UDim2.new(1, 0, 0, 45)
+                f.Size = UDim2.new(1,0,0,70)
                 f.BackgroundColor3 = CurrentTheme.ElementBackground
                 f.BorderSizePixel = 0
                 f.Parent = page
-                makeCorner(f, 8)
-                local s = makeStroke(f, CurrentTheme.ElementStroke, 2)
+                makeCorner(f,8)
+                local s = makeStroke(f,CurrentTheme.ElementStroke,2)
+                data._frame = f
+
+                local t = Instance.new("TextLabel")
+                t.BackgroundTransparency = 1
+                t.Size = UDim2.new(1,-24,1,-16)
+                t.Position = UDim2.new(0,12,0,8)
+                t.Text = tostring(text or "")
+                t.TextColor3 = CurrentTheme.TextColor
+                t.TextSize = 14
+                t.TextWrapped = true
+                t.TextXAlignment = Enum.TextXAlignment.Left
+                t.TextYAlignment = Enum.TextYAlignment.Top
+                t.Parent = f
+
+                function data:SetText(v) t.Text = tostring(v or "") end
+                function data:Destroy() destroyElement(data) end
+                function data:RefreshTheme()
+                    f.BackgroundColor3 = CurrentTheme.ElementBackground
+                    s.Color = CurrentTheme.ElementStroke
+                    t.TextColor3 = CurrentTheme.TextColor
+                end
+                return data
+            end
+
+            -- ==================== SEPARATOR ====================
+            function SectionData:Separator()
+                local data = {_connections={}}
+                local f = Instance.new("Frame")
+                f.Size = UDim2.new(1,0,0,12)
+                f.BackgroundTransparency = 1
+                f.Parent = page
+                data._frame = f
+
+                local line = Instance.new("Frame")
+                line.Size = UDim2.new(1,-24,0,2)
+                line.Position = UDim2.new(0,12,0.5,-1)
+                line.BackgroundColor3 = CurrentTheme.Line
+                line.BorderSizePixel = 0
+                line.Parent = f
+
+                function data:Destroy() destroyElement(data) end
+                function data:RefreshTheme()
+                    line.BackgroundColor3 = CurrentTheme.Line
+                end
+                return data
+            end
+
+            -- ==================== TEXTBOX ====================
+            function SectionData:TextBox(placeholder, default, callback)
+                local data = {_connections={}}
+                local f = Instance.new("Frame")
+                f.Size = UDim2.new(1,0,0,45)
+                f.BackgroundColor3 = CurrentTheme.ElementBackground
+                f.BorderSizePixel = 0
+                f.Parent = page
+                makeCorner(f,8)
+                local s = makeStroke(f,CurrentTheme.ElementStroke,2)
+                data._frame = f
 
                 local box = Instance.new("TextBox")
                 box.BackgroundTransparency = 1
-                box.Size = UDim2.new(1, -24, 1, 0)
-                box.Position = UDim2.new(0, 12, 0, 0)
+                box.Size = UDim2.new(1,-24,1,0)
+                box.Position = UDim2.new(0,12,0,0)
                 box.Text = tostring(default or "")
                 box.PlaceholderText = tostring(placeholder or "Enter text...")
-                box.PlaceholderColor3 = Color3.fromRGB(140, 140, 150)
+                box.PlaceholderColor3 = Color3.fromRGB(140,140,150)
                 box.TextColor3 = CurrentTheme.TextColor
                 box.TextScaled = true
-                box.TextWrapped = false
                 box.ClearTextOnFocus = false
                 box.TextXAlignment = Enum.TextXAlignment.Left
                 box.Font = Enum.Font.Gotham
                 box.Parent = f
 
-                local pad = Instance.new("UIPadding")
-                pad.PaddingLeft = UDim.new(0, 4)
-                pad.PaddingRight = UDim.new(0, 4)
-                pad.PaddingTop = UDim.new(0, 8)
-                pad.PaddingBottom = UDim.new(0, 8)
-                pad.Parent = box
-
                 local function fire()
-                    if callback then
-                        task.spawn(callback, box.Text)
-                    end
+                    if callback then task.spawn(callback, box.Text) end
                 end
 
-                connectAndTrack(connections, box.FocusLost, function(enter)
-                    fire()
-                end)
+                connectAndTrack(data._connections, box.FocusLost, fire)
 
-                function data:SetText(value)
-                    box.Text = tostring(value or "")
-                end
-                function data:GetText()
-                    return box.Text
-                end
-                function data:Get()
-                    return box.Text
-                end
-                function data:Set(value)
-                    box.Text = tostring(value or "")
-                    fire()
-                end
-                function data:SetPlaceholder(value)
-                    box.PlaceholderText = tostring(value or "")
-                end
+                function data:SetText(value) box.Text = tostring(value or "") end
+                function data:GetText() return box.Text end
+                function data:Get() return box.Text end
+                function data:Set(value) box.Text = tostring(value or ""); fire() end
+                function data:Destroy() destroyElement(data) end
                 function data:RefreshTheme()
                     f.BackgroundColor3 = CurrentTheme.ElementBackground
                     s.Color = CurrentTheme.ElementStroke
@@ -801,31 +801,22 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 local cfgKey = key or placeholder
                 local saved = CrackedLib.Config.Data[cfgKey]
                 local initial = type(saved) == "string" and saved or tostring(default or "")
-
                 local data = self:TextBox(placeholder, initial, function(text)
                     CrackedLib.Config.Data[cfgKey] = text
                     CrackedLib.Config:Save()
-                    if callback then
-                        callback(text)
-                    end
+                    if callback then callback(text) end
                 end)
-
                 if saved == nil then
                     CrackedLib.Config.Data[cfgKey] = initial
                     CrackedLib.Config:Save()
                 end
-
-                if callback then
-                    task.defer(function()
-                        callback(initial)
-                    end)
-                end
-
+                if callback then task.defer(function() callback(initial) end) end
                 return data
             end
 
+            -- ==================== TOGGLE ====================
             function SectionData:Toggle(label, state, callback)
-                local data = {State = state == true, Hover=false}
+                local data = {State = state == true, Hover=false, _connections={}}
                 local b = Instance.new("TextButton")
                 b.Size=UDim2.new(1,0,0,45)
                 b.BackgroundColor3=CurrentTheme.ElementBackground
@@ -835,6 +826,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 b.Parent=page
                 makeCorner(b,8)
                 local bs=makeStroke(b,CurrentTheme.ElementStroke,2)
+                data._frame = b
 
                 local t=Instance.new("TextLabel")
                 t.BackgroundTransparency=1
@@ -870,23 +862,24 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 end
                 update(false)
 
-                connectAndTrack(connections,b.MouseEnter,function()
+                connectAndTrack(data._connections,b.MouseEnter,function()
                     data.Hover=true
                     b.BackgroundColor3=CurrentTheme.ElementBackgroundHover
                     bs.Color=CurrentTheme.ElementStrokeHover
                 end)
-                connectAndTrack(connections,b.MouseLeave,function()
+                connectAndTrack(data._connections,b.MouseLeave,function()
                     data.Hover=false
                     b.BackgroundColor3=CurrentTheme.ElementBackground
                     bs.Color=CurrentTheme.ElementStroke
                 end)
-                connectAndTrack(connections,b.MouseButton1Click,function()
+                connectAndTrack(data._connections,b.MouseButton1Click,function()
                     data.State=not data.State
                     update(true)
                 end)
 
                 function data:Set(value) data.State=value==true; update(true) end
                 function data:Get() return data.State end
+                function data:Destroy() destroyElement(data) end
                 function data:RefreshTheme()
                     b.BackgroundColor3=data.Hover and CurrentTheme.ElementBackgroundHover or CurrentTheme.ElementBackground
                     bs.Color=data.Hover and CurrentTheme.ElementStrokeHover or CurrentTheme.ElementStroke
@@ -898,13 +891,27 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 return data
             end
 
+            function SectionData:ConfigToggle(label, default, callback, key)
+                local cfgKey = key or label
+                local saved = CrackedLib.Config.Data[cfgKey]
+                local value = type(saved) == "boolean" and saved or (default == true)
+                local data = self:Toggle(label, value, function(v)
+                    CrackedLib.Config.Data[cfgKey] = v
+                    CrackedLib.Config:Save()
+                    if callback then callback(v) end
+                end)
+                if callback then task.defer(function() callback(value) end) end
+                return data
+            end
+
+            -- ==================== SLIDER ====================
             function SectionData:Slider(label, min, max, default, callback)
                 min = tonumber(min) or 0
                 max = tonumber(max) or 100
                 if max < min then min,max=max,min end
                 local range=max-min
                 local value=math.clamp(tonumber(default) or min,min,max)
-                local data={Value=value}
+                local data={Value=value, _connections={}}
 
                 local f=Instance.new("Frame")
                 f.Size=UDim2.new(1,0,0,65)
@@ -913,6 +920,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 f.Parent=page
                 makeCorner(f,8)
                 local fs=makeStroke(f,CurrentTheme.ElementStroke,2)
+                data._frame = f
 
                 local t=Instance.new("TextLabel")
                 t.BackgroundTransparency=1
@@ -965,18 +973,18 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 end
                 setValue(value,false)
 
-                connectAndTrack(connections,back.InputBegan,function(input)
+                connectAndTrack(data._connections,back.InputBegan,function(input)
                     if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
                         dragging=true
                         updateFromX(input.Position.X)
                     end
                 end)
-                connectAndTrack(connections,UserInputService.InputChanged,function(input)
+                connectAndTrack(data._connections,UserInputService.InputChanged,function(input)
                     if dragging and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then
                         updateFromX(input.Position.X)
                     end
                 end)
-                connectAndTrack(connections,UserInputService.InputEnded,function(input)
+                connectAndTrack(data._connections,UserInputService.InputEnded,function(input)
                     if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
                         dragging=false
                     end
@@ -984,6 +992,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 
                 function data:Set(v) setValue(v,true) end
                 function data:Get() return data.Value end
+                function data:Destroy() destroyElement(data) end
                 function data:RefreshTheme()
                     f.BackgroundColor3=CurrentTheme.ElementBackground
                     fs.Color=CurrentTheme.ElementStroke
@@ -996,76 +1005,95 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 return data
             end
 
+            function SectionData:ConfigSlider(label, min, max, default, callback, key)
+                local cfgKey = key or label
+                local saved = CrackedLib.Config.Data[cfgKey]
+                min = tonumber(min) or 0
+                max = tonumber(max) or 100
+                if max < min then min, max = max, min end
+                local value = type(saved) == "number" and saved or (tonumber(default) or min)
+                value = math.clamp(value, min, max)
+                local data = self:Slider(label, min, max, value, function(v)
+                    CrackedLib.Config.Data[cfgKey] = v
+                    CrackedLib.Config:Save()
+                    if callback then callback(v) end
+                end)
+                if callback then task.defer(function() callback(value) end) end
+                return data
+            end
+
+            -- ==================== DROPDOWN (Multi supported) ====================
             function SectionData:Dropdown(label, options, callback, MultiSelect)
                 options = type(options)=="table" and options or {}
-                local multi=MultiSelect==true
-                local data={Open=false,Value=nil,Values={}}
-                local buttons={}
+                local multi = MultiSelect == true
+                local data = {Open=false, Value=nil, Values={}, _connections={}, _destroyed=false}
+                local buttons = {}
 
-                local f=Instance.new("Frame")
-                f.Size=UDim2.new(1,0,0,45)
-                f.BackgroundColor3=CurrentTheme.ElementBackground
-                f.BorderSizePixel=0
-                f.ClipsDescendants=true
-                f.Parent=page
+                local f = Instance.new("Frame")
+                f.Size = UDim2.new(1,0,0,45)
+                f.BackgroundColor3 = CurrentTheme.ElementBackground
+                f.BorderSizePixel = 0
+                f.ClipsDescendants = true
+                f.Parent = page
                 makeCorner(f,8)
-                local fs=makeStroke(f,CurrentTheme.ElementStroke,2)
+                local fs = makeStroke(f,CurrentTheme.ElementStroke,2)
+                data._frame = f
 
-                local txt=Instance.new("TextLabel")
-                txt.BackgroundTransparency=1
-                txt.Position=UDim2.new(0,24,0,0)
-                txt.Size=UDim2.new(1,-64,0,45)
-                txt.Text=tostring(label or "Dropdown")
-                txt.TextColor3=CurrentTheme.TextColor
-                txt.TextScaled=true
-                txt.TextXAlignment=Enum.TextXAlignment.Left
-                txt.Parent=f
+                local txt = Instance.new("TextLabel")
+                txt.BackgroundTransparency = 1
+                txt.Position = UDim2.new(0,24,0,0)
+                txt.Size = UDim2.new(1,-64,0,45)
+                txt.Text = tostring(label or "Dropdown")
+                txt.TextColor3 = CurrentTheme.TextColor
+                txt.TextScaled = true
+                txt.TextXAlignment = Enum.TextXAlignment.Left
+                txt.Parent = f
 
-                local arrow=Instance.new("TextButton")
-                arrow.BackgroundTransparency=1
-                arrow.Position=UDim2.new(1,-44,0,0)
-                arrow.Size=UDim2.fromOffset(44,45)
-                arrow.Text="▼"
-                arrow.TextColor3=CurrentTheme.TextColor
-                arrow.TextScaled=true
-                arrow.AutoButtonColor=false
-                arrow.Parent=f
+                local arrow = Instance.new("TextButton")
+                arrow.BackgroundTransparency = 1
+                arrow.Position = UDim2.new(1,-44,0,0)
+                arrow.Size = UDim2.fromOffset(44,45)
+                arrow.Text = "▼"
+                arrow.TextColor3 = CurrentTheme.TextColor
+                arrow.TextScaled = true
+                arrow.AutoButtonColor = false
+                arrow.Parent = f
 
-                local list=Instance.new("Frame")
-                list.Position=UDim2.new(0,0,0,45)
-                list.Size=UDim2.new(1,0,0,0)
-                list.BackgroundColor3=CurrentTheme.Background
-                list.BorderSizePixel=0
-                list.Parent=f
-                local ll=Instance.new("UIListLayout")
-                ll.SortOrder=Enum.SortOrder.LayoutOrder
-                ll.Parent=list
+                local list = Instance.new("Frame")
+                list.Position = UDim2.new(0,0,0,45)
+                list.Size = UDim2.new(1,0,0,0)
+                list.BackgroundColor3 = CurrentTheme.Background
+                list.BorderSizePixel = 0
+                list.Parent = f
+                local ll = Instance.new("UIListLayout")
+                ll.SortOrder = Enum.SortOrder.LayoutOrder
+                ll.Parent = list
 
                 local function selectedText()
                     if not multi then
                         return data.Value and (tostring(label or "Dropdown")..": "..tostring(data.Value)) or tostring(label or "Dropdown")
                     end
-                    local selected={}
+                    local selected = {}
                     for _,o in ipairs(options) do
-                        if data.Values[o] then table.insert(selected,tostring(o)) end
+                        if data.Values[o] then table.insert(selected, tostring(o)) end
                     end
-                    return #selected>0 and tostring(label or "Dropdown")..": "..table.concat(selected,", ") or tostring(label or "Dropdown")
+                    return #selected > 0 and tostring(label or "Dropdown")..": "..table.concat(selected, ", ") or tostring(label or "Dropdown")
                 end
 
                 local function refreshButtons()
                     for _,item in ipairs(buttons) do
-                        local chosen=multi and data.Values[item.Option] or data.Value==item.Option
-                        item.Button.Text=tostring(item.Option)..(chosen and " ✓" or "")
-                        item.Button.BackgroundColor3=CurrentTheme.ElementBackground
-                        item.Button.TextColor3=CurrentTheme.TextColor
+                        local chosen = multi and data.Values[item.Option] or data.Value == item.Option
+                        item.Button.Text = tostring(item.Option)..(chosen and " ✓" or "")
+                        item.Button.BackgroundColor3 = CurrentTheme.ElementBackground
+                        item.Button.TextColor3 = CurrentTheme.TextColor
                     end
                 end
 
                 local function refreshSize()
-                    local count=#options
-                    list.Size=UDim2.new(1,0,0,data.Open and count*35 or 0)
-                    f.Size=UDim2.new(1,0,0,data.Open and 45+count*35 or 45)
-                    arrow.Text=data.Open and "▲" or "▼"
+                    local count = #options
+                    list.Size = UDim2.new(1,0,0, data.Open and count*35 or 0)
+                    f.Size = UDim2.new(1,0,0, data.Open and 45+count*35 or 45)
+                    arrow.Text = data.Open and "▲" or "▼"
                 end
 
                 local function clearButtons()
@@ -1078,31 +1106,31 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 local function buildButtons()
                     clearButtons()
                     for _,option in ipairs(options) do
-                        local b=Instance.new("TextButton")
-                        b.Size=UDim2.new(1,0,0,35)
-                        b.BackgroundColor3=CurrentTheme.ElementBackground
-                        b.BorderSizePixel=0
-                        b.Text=tostring(option)
-                        b.TextColor3=CurrentTheme.TextColor
-                        b.TextScaled=true
-                        b.AutoButtonColor=false
-                        b.Parent=list
-                        local item={Option=option,Button=b}
-                        table.insert(buttons,item)
+                        local b = Instance.new("TextButton")
+                        b.Size = UDim2.new(1,0,0,35)
+                        b.BackgroundColor3 = CurrentTheme.ElementBackground
+                        b.BorderSizePixel = 0
+                        b.Text = tostring(option)
+                        b.TextColor3 = CurrentTheme.TextColor
+                        b.TextScaled = true
+                        b.AutoButtonColor = false
+                        b.Parent = list
+                        local item = {Option=option, Button=b}
+                        table.insert(buttons, item)
 
-                        connectAndTrack(connections,b.MouseEnter,function() b.BackgroundColor3=CurrentTheme.ElementBackgroundHover end)
-                        connectAndTrack(connections,b.MouseLeave,function() b.BackgroundColor3=CurrentTheme.ElementBackground end)
-                        connectAndTrack(connections,b.MouseButton1Click,function()
+                        connectAndTrack(data._connections, b.MouseEnter, function() b.BackgroundColor3 = CurrentTheme.ElementBackgroundHover end)
+                        connectAndTrack(data._connections, b.MouseLeave, function() b.BackgroundColor3 = CurrentTheme.ElementBackground end)
+                        connectAndTrack(data._connections, b.MouseButton1Click, function()
                             if multi then
-                                data.Values[option]=not data.Values[option]
+                                data.Values[option] = not data.Values[option]
                             else
-                                data.Value=option
-                                data.Open=false
+                                data.Value = option
+                                data.Open = false
                             end
-                            txt.Text=selectedText()
+                            txt.Text = selectedText()
                             refreshButtons()
                             refreshSize()
-                            if callback then task.spawn(callback,multi and data.Values or data.Value) end
+                            if callback then task.spawn(callback, multi and data.Values or data.Value) end
                         end)
                     end
                     refreshButtons()
@@ -1111,192 +1139,285 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 
                 buildButtons()
 
-                connectAndTrack(connections,arrow.MouseButton1Click,function()
-                    data.Open=not data.Open
+                connectAndTrack(data._connections, arrow.MouseButton1Click, function()
+                    data.Open = not data.Open
                     refreshSize()
                 end)
-                -- also open by clicking label area
-                connectAndTrack(connections,txt.InputBegan,function(input)
-                    if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
-                        data.Open=not data.Open
+                connectAndTrack(data._connections, txt.InputBegan, function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        data.Open = not data.Open
                         refreshSize()
                     end
                 end)
 
                 function data:Set(value)
                     if multi then
-                        data.Values={}
-                        if type(value)=="table" then
-                            -- support both {opt=true} and {opt1,opt2}
-                            local isList=true
+                        data.Values = {}
+                        if type(value) == "table" then
+                            local isList = true
                             for k,_ in pairs(value) do
-                                if type(k)~="number" then isList=false break end
+                                if type(k) ~= "number" then isList = false break end
                             end
                             if isList then
-                                for _,o in ipairs(value) do data.Values[o]=true end
+                                for _,o in ipairs(value) do data.Values[o] = true end
                             else
                                 for _,o in ipairs(options) do
-                                    if value[o]==true then data.Values[o]=true end
+                                    if value[o] == true then data.Values[o] = true end
                                 end
                             end
-                        elseif value~=nil then
-                            data.Values[value]=true
+                        elseif value ~= nil then
+                            data.Values[value] = true
                         end
                     else
-                        local valid=false
+                        local valid = false
                         for _,o in ipairs(options) do
-                            if o==value then valid=true break end
+                            if o == value then valid = true break end
                         end
-                        data.Value=valid and value or nil
+                        data.Value = valid and value or nil
                     end
-                    txt.Text=selectedText()
+                    txt.Text = selectedText()
                     refreshButtons()
-                    if callback then task.spawn(callback,multi and data.Values or data.Value) end
+                    if callback then task.spawn(callback, multi and data.Values or data.Value) end
                 end
 
                 function data:Get() return multi and data.Values or data.Value end
-
                 function data:Clear()
-                    data.Value=nil
-                    data.Values={}
-                    txt.Text=selectedText()
+                    data.Value = nil
+                    data.Values = {}
+                    txt.Text = selectedText()
                     refreshButtons()
                 end
 
-                -- Rebuild option list at runtime (player lists, etc.)
                 function data:Refresh(newOptions, keepSelection)
-                    options = type(newOptions)=="table" and newOptions or {}
+                    options = type(newOptions) == "table" and newOptions or {}
                     if not keepSelection then
-                        data.Value=nil
-                        data.Values={}
+                        data.Value = nil
+                        data.Values = {}
                     else
-                        -- drop selections that no longer exist
                         if multi then
-                            local nextVals={}
+                            local nextVals = {}
                             for _,o in ipairs(options) do
-                                if data.Values[o] then nextVals[o]=true end
+                                if data.Values[o] then nextVals[o] = true end
                             end
-                            data.Values=nextVals
+                            data.Values = nextVals
                         else
-                            local ok=false
+                            local ok = false
                             for _,o in ipairs(options) do
-                                if o==data.Value then ok=true break end
+                                if o == data.Value then ok = true break end
                             end
-                            if not ok then data.Value=nil end
+                            if not ok then data.Value = nil end
                         end
                     end
                     buildButtons()
-                    txt.Text=selectedText()
+                    txt.Text = selectedText()
+                end
+
+                function data:ChangeOptions(newOptions, keepSelection)
+                    self:Refresh(newOptions, keepSelection)
                 end
 
                 function data:Add(option)
-                    if option==nil then return end
+                    if option == nil then return end
                     for _,o in ipairs(options) do
-                        if o==option then return end
+                        if o == option then return end
                     end
                     table.insert(options, option)
                     buildButtons()
-                    txt.Text=selectedText()
+                    txt.Text = selectedText()
                 end
 
                 function data:Remove(option)
                     for i,o in ipairs(options) do
-                        if o==option then
+                        if o == option then
                             table.remove(options, i)
                             break
                         end
                     end
-                    if multi then data.Values[option]=nil
-                    elseif data.Value==option then data.Value=nil end
+                    if multi then data.Values[option] = nil
+                    elseif data.Value == option then data.Value = nil end
                     buildButtons()
-                    txt.Text=selectedText()
+                    txt.Text = selectedText()
                 end
 
                 function data:GetOptions()
-                    local copy={}
-                    for i,o in ipairs(options) do copy[i]=o end
+                    local copy = {}
+                    for i,o in ipairs(options) do copy[i] = o end
                     return copy
                 end
 
+                function data:Destroy() destroyElement(data) end
                 function data:RefreshTheme()
-                    f.BackgroundColor3=CurrentTheme.ElementBackground
-                    fs.Color=CurrentTheme.ElementStroke
-                    txt.TextColor3=CurrentTheme.TextColor
-                    arrow.TextColor3=CurrentTheme.TextColor
-                    list.BackgroundColor3=CurrentTheme.Background
+                    f.BackgroundColor3 = CurrentTheme.ElementBackground
+                    fs.Color = CurrentTheme.ElementStroke
+                    txt.TextColor3 = CurrentTheme.TextColor
+                    arrow.TextColor3 = CurrentTheme.TextColor
+                    list.BackgroundColor3 = CurrentTheme.Background
                     refreshButtons()
                 end
 
-                txt.Text=selectedText()
+                txt.Text = selectedText()
                 refreshSize()
                 return data
             end
 
-            -- Dropdown of toggles: each option is an independent on/off switch
-            -- callback(option, state, allStates)
+            function SectionData:ConfigDropdown(label, options, callback, MultiSelect, key)
+                local cfgKey = key or label
+                local saved = CrackedLib.Config.Data[cfgKey]
+                local data = self:Dropdown(label, options, function(v)
+                    CrackedLib.Config.Data[cfgKey] = v
+                    CrackedLib.Config:Save()
+                    if callback then callback(v) end
+                end, MultiSelect)
+                if saved ~= nil then
+                    task.defer(function()
+                        if data then data:Set(saved) end
+                    end)
+                elseif callback then
+                    task.defer(function() callback(data:Get()) end)
+                end
+                return data
+            end
+
+            -- ==================== KEYBIND ====================
+            function SectionData:Keybind(label, defaultKey, callback)
+                local data = {
+                    Key = defaultKey or Enum.KeyCode.Unknown,
+                    Listening = false,
+                    _connections = {}
+                }
+
+                local b = Instance.new("TextButton")
+                b.Size = UDim2.new(1,0,0,45)
+                b.BackgroundColor3 = CurrentTheme.ElementBackground
+                b.BorderSizePixel = 0
+                b.Text = ""
+                b.AutoButtonColor = false
+                b.Parent = page
+                makeCorner(b,8)
+                local bs = makeStroke(b,CurrentTheme.ElementStroke,2)
+                data._frame = b
+
+                local t = Instance.new("TextLabel")
+                t.BackgroundTransparency = 1
+                t.Position = UDim2.new(0,24,0,0)
+                t.Size = UDim2.new(0.6,0,1,0)
+                t.Text = tostring(label or "Keybind")
+                t.TextColor3 = CurrentTheme.TextColor
+                t.TextScaled = true
+                t.TextXAlignment = Enum.TextXAlignment.Left
+                t.Parent = b
+
+                local keyLabel = Instance.new("TextLabel")
+                keyLabel.BackgroundTransparency = 1
+                keyLabel.Position = UDim2.new(0.62,0,0,0)
+                keyLabel.Size = UDim2.new(0.35,0,1,0)
+                keyLabel.Text = data.Key.Name
+                keyLabel.TextColor3 = CurrentTheme.TextColor
+                keyLabel.TextScaled = true
+                keyLabel.TextXAlignment = Enum.TextXAlignment.Right
+                keyLabel.Parent = b
+
+                local function updateText()
+                    keyLabel.Text = data.Listening and "..." or data.Key.Name
+                end
+
+                connectAndTrack(data._connections, b.MouseButton1Click, function()
+                    data.Listening = true
+                    updateText()
+                end)
+
+                connectAndTrack(data._connections, UserInputService.InputBegan, function(input, gpe)
+                    if not data.Listening then return end
+                    if input.UserInputType == Enum.UserInputType.Keyboard then
+                        data.Key = input.KeyCode
+                        data.Listening = false
+                        updateText()
+                        if callback then task.spawn(callback, data.Key) end
+                    end
+                end)
+
+                function data:Set(key)
+                    if typeof(key) == "EnumItem" then
+                        data.Key = key
+                        updateText()
+                    end
+                end
+                function data:Get() return data.Key end
+                function data:Destroy() destroyElement(data) end
+                function data:RefreshTheme()
+                    b.BackgroundColor3 = CurrentTheme.ElementBackground
+                    bs.Color = CurrentTheme.ElementStroke
+                    t.TextColor3 = CurrentTheme.TextColor
+                    keyLabel.TextColor3 = CurrentTheme.TextColor
+                end
+                return data
+            end
+
+            -- ==================== TOGGLELIST ====================
             function SectionData:ToggleList(label, options, callback, defaults)
                 options = type(options)=="table" and options or {}
                 defaults = type(defaults)=="table" and defaults or {}
-                local data={Open=false, States={}}
-                local buttons={}
+                local data = {Open=false, States={}, _connections={}}
+                local buttons = {}
 
                 for _,o in ipairs(options) do
                     data.States[o] = defaults[o]==true
                 end
 
-                local f=Instance.new("Frame")
-                f.Size=UDim2.new(1,0,0,45)
-                f.BackgroundColor3=CurrentTheme.ElementBackground
-                f.BorderSizePixel=0
-                f.ClipsDescendants=true
-                f.Parent=page
+                local f = Instance.new("Frame")
+                f.Size = UDim2.new(1,0,0,45)
+                f.BackgroundColor3 = CurrentTheme.ElementBackground
+                f.BorderSizePixel = 0
+                f.ClipsDescendants = true
+                f.Parent = page
                 makeCorner(f,8)
-                local fs=makeStroke(f,CurrentTheme.ElementStroke,2)
+                local fs = makeStroke(f,CurrentTheme.ElementStroke,2)
+                data._frame = f
 
-                local txt=Instance.new("TextLabel")
-                txt.BackgroundTransparency=1
-                txt.Position=UDim2.new(0,24,0,0)
-                txt.Size=UDim2.new(1,-64,0,45)
-                txt.Text=tostring(label or "Toggles")
-                txt.TextColor3=CurrentTheme.TextColor
-                txt.TextScaled=true
-                txt.TextXAlignment=Enum.TextXAlignment.Left
-                txt.Parent=f
+                local txt = Instance.new("TextLabel")
+                txt.BackgroundTransparency = 1
+                txt.Position = UDim2.new(0,24,0,0)
+                txt.Size = UDim2.new(1,-64,0,45)
+                txt.Text = tostring(label or "Toggles")
+                txt.TextColor3 = CurrentTheme.TextColor
+                txt.TextScaled = true
+                txt.TextXAlignment = Enum.TextXAlignment.Left
+                txt.Parent = f
 
-                local arrow=Instance.new("TextButton")
-                arrow.BackgroundTransparency=1
-                arrow.Position=UDim2.new(1,-44,0,0)
-                arrow.Size=UDim2.fromOffset(44,45)
-                arrow.Text="▼"
-                arrow.TextColor3=CurrentTheme.TextColor
-                arrow.TextScaled=true
-                arrow.AutoButtonColor=false
-                arrow.Parent=f
+                local arrow = Instance.new("TextButton")
+                arrow.BackgroundTransparency = 1
+                arrow.Position = UDim2.new(1,-44,0,0)
+                arrow.Size = UDim2.fromOffset(44,45)
+                arrow.Text = "▼"
+                arrow.TextColor3 = CurrentTheme.TextColor
+                arrow.TextScaled = true
+                arrow.AutoButtonColor = false
+                arrow.Parent = f
 
-                local list=Instance.new("Frame")
-                list.Position=UDim2.new(0,0,0,45)
-                list.Size=UDim2.new(1,0,0,0)
-                list.BackgroundColor3=CurrentTheme.Background
-                list.BorderSizePixel=0
-                list.Parent=f
-                local ll=Instance.new("UIListLayout")
-                ll.SortOrder=Enum.SortOrder.LayoutOrder
-                ll.Parent=list
+                local list = Instance.new("Frame")
+                list.Position = UDim2.new(0,0,0,45)
+                list.Size = UDim2.new(1,0,0,0)
+                list.BackgroundColor3 = CurrentTheme.Background
+                list.BorderSizePixel = 0
+                list.Parent = f
+                local ll = Instance.new("UIListLayout")
+                ll.SortOrder = Enum.SortOrder.LayoutOrder
+                ll.Parent = list
 
                 local function summaryText()
-                    local on={}
+                    local on = {}
                     for _,o in ipairs(options) do
                         if data.States[o] then table.insert(on, tostring(o)) end
                     end
-                    if #on==0 then return tostring(label or "Toggles") end
+                    if #on == 0 then return tostring(label or "Toggles") end
                     return tostring(label or "Toggles")..": "..table.concat(on, ", ")
                 end
 
                 local function refreshSize()
-                    local count=#options
-                    list.Size=UDim2.new(1,0,0,data.Open and count*40 or 0)
-                    f.Size=UDim2.new(1,0,0,data.Open and 45+count*40 or 45)
-                    arrow.Text=data.Open and "▲" or "▼"
+                    local count = #options
+                    list.Size = UDim2.new(1,0,0, data.Open and count*40 or 0)
+                    f.Size = UDim2.new(1,0,0, data.Open and 45+count*40 or 45)
+                    arrow.Text = data.Open and "▲" or "▼"
                 end
 
                 local function clearButtons()
@@ -1309,546 +1430,116 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
                 local function buildButtons()
                     clearButtons()
                     for _,option in ipairs(options) do
-                        local row=Instance.new("TextButton")
-                        row.Size=UDim2.new(1,0,0,40)
-                        row.BackgroundColor3=CurrentTheme.ElementBackground
-                        row.BorderSizePixel=0
-                        row.Text=""
-                        row.AutoButtonColor=false
-                        row.Parent=list
+                        local row = Instance.new("TextButton")
+                        row.Size = UDim2.new(1,0,0,40)
+                        row.BackgroundColor3 = CurrentTheme.ElementBackground
+                        row.BorderSizePixel = 0
+                        row.Text = ""
+                        row.AutoButtonColor = false
+                        row.Parent = list
 
-                        local name=Instance.new("TextLabel")
-                        name.BackgroundTransparency=1
-                        name.Position=UDim2.new(0,12,0,0)
-                        name.Size=UDim2.new(1,-70,1,0)
-                        name.Text=tostring(option)
-                        name.TextColor3=CurrentTheme.TextColor
-                        name.TextScaled=true
-                        name.TextXAlignment=Enum.TextXAlignment.Left
-                        name.Parent=row
+                        local name = Instance.new("TextLabel")
+                        name.BackgroundTransparency = 1
+                        name.Position = UDim2.new(0,12,0,0)
+                        name.Size = UDim2.new(1,-70,1,0)
+                        name.Text = tostring(option)
+                        name.TextColor3 = CurrentTheme.TextColor
+                        name.TextScaled = true
+                        name.TextXAlignment = Enum.TextXAlignment.Left
+                        name.Parent = row
 
-                        local knob=Instance.new("Frame")
-                        knob.AnchorPoint=Vector2.new(1,0.5)
-                        knob.Position=UDim2.new(1,-12,0.5,0)
-                        knob.Size=UDim2.fromOffset(42,22)
-                        knob.BorderSizePixel=0
-                        knob.Parent=row
+                        local knob = Instance.new("Frame")
+                        knob.AnchorPoint = Vector2.new(1,0.5)
+                        knob.Position = UDim2.new(1,-12,0.5,0)
+                        knob.Size = UDim2.fromOffset(42,22)
+                        knob.BorderSizePixel = 0
+                        knob.Parent = row
                         makeCorner(knob,11)
-                        local ks=makeStroke(knob,CurrentTheme.ElementStroke,1)
+                        local ks = makeStroke(knob,CurrentTheme.ElementStroke,1)
 
-                        local dot=Instance.new("Frame")
-                        dot.Size=UDim2.fromOffset(16,16)
-                        dot.AnchorPoint=Vector2.new(0,0.5)
-                        dot.Position=UDim2.new(0,3,0.5,0)
-                        dot.BorderSizePixel=0
-                        dot.BackgroundColor3=Color3.new(1,1,1)
-                        dot.Parent=knob
+                        local dot = Instance.new("Frame")
+                        dot.Size = UDim2.fromOffset(16,16)
+                        dot.AnchorPoint = Vector2.new(0,0.5)
+                        dot.Position = UDim2.new(0,3,0.5,0)
+                        dot.BorderSizePixel = 0
+                        dot.BackgroundColor3 = Color3.new(1,1,1)
+                        dot.Parent = knob
                         makeCorner(dot,8)
 
                         local function paint()
-                            local on=data.States[option]==true
-                            knob.BackgroundColor3=on and CurrentTheme.TabBackgroundSelected or CurrentTheme.Background
-                            dot.Position=on and UDim2.new(1,-19,0.5,0) or UDim2.new(0,3,0.5,0)
+                            local on = data.States[option] == true
+                            knob.BackgroundColor3 = on and CurrentTheme.TabBackgroundSelected or CurrentTheme.Background
+                            dot.Position = on and UDim2.new(1,-19,0.5,0) or UDim2.new(0,3,0.5,0)
                         end
                         paint()
 
                         local function toggle()
-                            data.States[option]=not data.States[option]
+                            data.States[option] = not data.States[option]
                             paint()
-                            txt.Text=summaryText()
+                            txt.Text = summaryText()
                             if callback then
                                 task.spawn(callback, option, data.States[option], data.States)
                             end
                         end
 
-                        connectAndTrack(connections,row.MouseButton1Click,toggle)
-                        connectAndTrack(connections,row.MouseEnter,function() row.BackgroundColor3=CurrentTheme.ElementBackgroundHover end)
-                        connectAndTrack(connections,row.MouseLeave,function() row.BackgroundColor3=CurrentTheme.ElementBackground end)
+                        connectAndTrack(data._connections, row.MouseButton1Click, toggle)
+                        connectAndTrack(data._connections, row.MouseEnter, function() row.BackgroundColor3 = CurrentTheme.ElementBackgroundHover end)
+                        connectAndTrack(data._connections, row.MouseLeave, function() row.BackgroundColor3 = CurrentTheme.ElementBackground end)
 
-                        table.insert(buttons,{Option=option,Row=row,Paint=paint})
+                        table.insert(buttons, {Option=option, Row=row, Paint=paint})
                     end
                     refreshSize()
-                    txt.Text=summaryText()
+                    txt.Text = summaryText()
                 end
 
                 buildButtons()
 
-                connectAndTrack(connections,arrow.MouseButton1Click,function()
-                    data.Open=not data.Open
+                connectAndTrack(data._connections, arrow.MouseButton1Click, function()
+                    data.Open = not data.Open
                     refreshSize()
                 end)
 
                 function data:Get() return data.States end
                 function data:Set(option, state)
-                    if option==nil then return end
-                    data.States[option]=state==true
+                    if option == nil then return end
+                    data.States[option] = state == true
                     for _,item in ipairs(buttons) do
-                        if item.Option==option and item.Paint then item.Paint() end
+                        if item.Option == option and item.Paint then item.Paint() end
                     end
-                    txt.Text=summaryText()
+                    txt.Text = summaryText()
                 end
                 function data:SetAll(map)
-                    if type(map)~="table" then return end
+                    if type(map) ~= "table" then return end
                     for _,o in ipairs(options) do
-                        data.States[o]=map[o]==true
+                        data.States[o] = map[o] == true
                     end
                     for _,item in ipairs(buttons) do
                         if item.Paint then item.Paint() end
                     end
-                    txt.Text=summaryText()
+                    txt.Text = summaryText()
                 end
                 function data:Refresh(newOptions, newDefaults)
-                    options=type(newOptions)=="table" and newOptions or {}
-                    local nextStates={}
+                    options = type(newOptions)=="table" and newOptions or {}
+                    local nextStates = {}
                     for _,o in ipairs(options) do
-                        if newDefaults and newDefaults[o]~=nil then
-                            nextStates[o]=newDefaults[o]==true
+                        if newDefaults and newDefaults[o] ~= nil then
+                            nextStates[o] = newDefaults[o] == true
                         else
-                            nextStates[o]=data.States[o]==true
+                            nextStates[o] = data.States[o] == true
                         end
                     end
-                    data.States=nextStates
+                    data.States = nextStates
                     buildButtons()
                 end
+                function data:Destroy() destroyElement(data) end
                 function data:RefreshTheme()
-                    f.BackgroundColor3=CurrentTheme.ElementBackground
-                    fs.Color=CurrentTheme.ElementStroke
-                    txt.TextColor3=CurrentTheme.TextColor
-                    arrow.TextColor3=CurrentTheme.TextColor
-                    list.BackgroundColor3=CurrentTheme.Background
+                    f.BackgroundColor3 = CurrentTheme.ElementBackground
+                    fs.Color = CurrentTheme.ElementStroke
+                    txt.TextColor3 = CurrentTheme.TextColor
+                    arrow.TextColor3 = CurrentTheme.TextColor
+                    list.BackgroundColor3 = CurrentTheme.Background
                     buildButtons()
                 end
-
-                return data
-            end
-
-            function SectionData:ColorPicker(label, default, callback)
-                local data = {Color = typeof(default) == "Color3" and default or Color3.new(1,1,1)}
-                local open = false
-                local popup
-
-                local b = Instance.new("TextButton")
-                b.Size = UDim2.new(1,0,0,45)
-                b.BackgroundColor3 = CurrentTheme.ElementBackground
-                b.BorderSizePixel = 0
-                b.Text = ""
-                b.AutoButtonColor = false
-                b.Parent = page
-                makeCorner(b,8)
-                local bs = makeStroke(b,CurrentTheme.ElementStroke,2)
-
-                local t = Instance.new("TextLabel")
-                t.BackgroundTransparency = 1
-                t.Position = UDim2.new(0,24,0,0)
-                t.Size = UDim2.new(0.65,0,1,0)
-                t.Text = tostring(label or "Color")
-                t.TextColor3 = CurrentTheme.TextColor
-                t.TextScaled = true
-                t.TextXAlignment = Enum.TextXAlignment.Left
-                t.Parent = b
-
-                local preview = Instance.new("Frame")
-                preview.AnchorPoint = Vector2.new(1,0.5)
-                preview.Position = UDim2.new(0.97,0,0.5,0)
-                preview.Size = UDim2.fromOffset(58,28)
-                preview.BackgroundColor3 = data.Color
-                preview.BorderSizePixel = 0
-                preview.Parent = b
-                makeCorner(preview,7)
-                local ps = makeStroke(preview,CurrentTheme.ElementStroke,2)
-
-                local function updatePreview()
-                    preview.BackgroundColor3 = data.Color
-                end
-
-                local function setColor(c, call)
-                    if typeof(c) ~= "Color3" then return end
-                    data.Color = c
-                    updatePreview()
-                    if call and callback then
-                        task.spawn(callback, data.Color)
-                    end
-                end
-
-                local function makeGradient(parent, colors, rotation)
-                    local g = Instance.new("UIGradient")
-                    g.Color = ColorSequence.new(colors)
-                    g.Rotation = rotation or 0
-                    g.Parent = parent
-                    return g
-                end
-
-                local function createPopup()
-                    if popup then popup:Destroy() end
-
-                    popup = Instance.new("Frame")
-                    popup.Name = "ColorPickerPopup"
-                    popup.Size = UDim2.fromOffset(300,330)
-                    popup.BackgroundColor3 = CurrentTheme.Background
-                    popup.BorderSizePixel = 0
-                    popup.ZIndex = 100
-                    popup.Parent = ScreenGui
-                    makeCorner(popup,10)
-                    makeStroke(popup,CurrentTheme.ElementStroke,2)
-
-                    local title = Instance.new("TextLabel")
-                    title.BackgroundTransparency = 1
-                    title.Position = UDim2.fromOffset(12,8)
-                    title.Size = UDim2.new(1,-24,0,28)
-                    title.Text = tostring(label or "Color Picker")
-                    title.TextColor3 = CurrentTheme.TextColor
-                    title.TextScaled = true
-                    title.TextXAlignment = Enum.TextXAlignment.Left
-                    title.ZIndex = 101
-                    title.Parent = popup
-
-                    local square = Instance.new("Frame")
-                    square.Position = UDim2.fromOffset(15,45)
-                    square.Size = UDim2.fromOffset(220,220)
-                    square.BackgroundColor3 = Color3.fromHSV(select(1, data.Color:ToHSV()),1,1)
-                    square.BorderSizePixel = 0
-                    square.ZIndex = 101
-                    square.Parent = popup
-                    makeCorner(square,6)
-
-                    makeGradient(square, {
-                        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
-                        ColorSequenceKeypoint.new(1, Color3.fromHSV(select(1, data.Color:ToHSV()),1,1))
-                    }, 0)
-
-                    local black = Instance.new("Frame")
-                    black.BackgroundTransparency = 1
-                    black.Size = UDim2.fromScale(1,1)
-                    black.ZIndex = 102
-                    black.Parent = square
-                    makeGradient(black, {
-                        ColorSequenceKeypoint.new(0, Color3.new(1,1,1)),
-                        ColorSequenceKeypoint.new(1, Color3.new(0,0,0))
-                    }, 90)
-
-                    local cursor = Instance.new("Frame")
-                    cursor.Size = UDim2.fromOffset(10,10)
-                    cursor.AnchorPoint = Vector2.new(0.5,0.5)
-                    cursor.BackgroundTransparency = 1
-                    cursor.ZIndex = 103
-                    cursor.Parent = square
-                    local cursorStroke = makeStroke(cursor,Color3.new(1,1,1),2)
-
-                    local hue = Instance.new("Frame")
-                    hue.Position = UDim2.fromOffset(245,45)
-                    hue.Size = UDim2.fromOffset(35,220)
-                    hue.BackgroundColor3 = Color3.new(1,1,1)
-                    hue.BorderSizePixel = 0
-                    hue.ZIndex = 101
-                    hue.Parent = popup
-                    makeCorner(hue,6)
-                    makeGradient(hue,{
-                        ColorSequenceKeypoint.new(0,Color3.fromRGB(255,0,0)),
-                        ColorSequenceKeypoint.new(1/6,Color3.fromRGB(255,255,0)),
-                        ColorSequenceKeypoint.new(2/6,Color3.fromRGB(0,255,0)),
-                        ColorSequenceKeypoint.new(3/6,Color3.fromRGB(0,255,255)),
-                        ColorSequenceKeypoint.new(4/6,Color3.fromRGB(0,0,255)),
-                        ColorSequenceKeypoint.new(5/6,Color3.fromRGB(255,0,255)),
-                        ColorSequenceKeypoint.new(1,Color3.fromRGB(255,0,0))
-                    },90)
-
-                    local hueCursor = Instance.new("Frame")
-                    hueCursor.Size = UDim2.new(1,4,0,4)
-                    hueCursor.AnchorPoint = Vector2.new(0.5,0.5)
-                    hueCursor.BackgroundColor3 = Color3.new(1,1,1)
-                    hueCursor.BorderSizePixel = 0
-                    hueCursor.ZIndex = 103
-                    hueCursor.Parent = hue
-                    makeCorner(hueCursor,2)
-
-                    local hex = Instance.new("TextLabel")
-                    hex.BackgroundTransparency = 1
-                    hex.Position = UDim2.fromOffset(15,272)
-                    hex.Size = UDim2.fromOffset(170,25)
-                    hex.TextColor3 = CurrentTheme.TextColor
-                    hex.TextScaled = true
-                    hex.TextXAlignment = Enum.TextXAlignment.Left
-                    hex.ZIndex = 101
-                    hex.Parent = popup
-
-                    local close = Instance.new("TextButton")
-                    close.Position = UDim2.fromOffset(205,270)
-                    close.Size = UDim2.fromOffset(75,30)
-                    close.BackgroundColor3 = CurrentTheme.ElementBackground
-                    close.BorderSizePixel = 0
-                    close.Text = "Close"
-                    close.TextColor3 = CurrentTheme.TextColor
-                    close.TextScaled = true
-                    close.ZIndex = 101
-                    close.Parent = popup
-                    makeCorner(close,6)
-
-                    local h,s,v = data.Color:ToHSV()
-
-                    local function refresh()
-                        square.BackgroundColor3 = Color3.fromHSV(h,1,1)
-                        local x = math.clamp(s,0,1) * square.AbsoluteSize.X
-                        local y = (1-math.clamp(v,0,1)) * square.AbsoluteSize.Y
-                        cursor.Position = UDim2.fromOffset(x,y)
-                        hueCursor.Position = UDim2.new(0.5,0,math.clamp(h,0,1),0)
-                        local c = Color3.fromHSV(h,s,v)
-                        setColor(c,false)
-                        hex.Text = string.format("#%02X%02X%02X",
-                            math.floor(c.R*255+0.5),
-                            math.floor(c.G*255+0.5),
-                            math.floor(c.B*255+0.5))
-                    end
-
-                    local function updateSquare(x,y)
-                        local abs = square.AbsolutePosition
-                        local size = square.AbsoluteSize
-                        s = math.clamp((x-abs.X)/math.max(size.X,1),0,1)
-                        v = math.clamp(1-(y-abs.Y)/math.max(size.Y,1),0,1)
-                        refresh()
-                        if callback then task.spawn(callback,data.Color) end
-                    end
-
-                    local function updateHue(y)
-                        local abs = hue.AbsolutePosition
-                        local size = hue.AbsoluteSize
-                        h = math.clamp((y-abs.Y)/math.max(size.Y,1),0,1)
-                        refresh()
-                        if callback then task.spawn(callback,data.Color) end
-                    end
-
-                    local draggingSquare = false
-                    local draggingHue = false
-
-                    connectAndTrack(connections,square.InputBegan,function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                            draggingSquare = true
-                            updateSquare(input.Position.X,input.Position.Y)
-                        end
-                    end)
-                    connectAndTrack(connections,hue.InputBegan,function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                            draggingHue = true
-                            updateHue(input.Position.Y)
-                        end
-                    end)
-                    connectAndTrack(connections,UserInputService.InputChanged,function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-                            if draggingSquare then updateSquare(input.Position.X,input.Position.Y) end
-                            if draggingHue then updateHue(input.Position.Y) end
-                        end
-                    end)
-                    connectAndTrack(connections,UserInputService.InputEnded,function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                            draggingSquare = false
-                            draggingHue = false
-                        end
-                    end)
-                    connectAndTrack(connections,close.MouseButton1Click,function()
-                        open = false
-                        if popup then popup:Destroy(); popup=nil end
-                    end)
-
-                    refresh()
-                    popup.Position = UDim2.fromOffset(
-                        math.max(5, math.min(b.AbsolutePosition.X, workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X-305 or b.AbsolutePosition.X)),
-                        b.AbsolutePosition.Y + b.AbsoluteSize.Y + 6
-                    )
-                end
-
-                connectAndTrack(connections,b.MouseButton1Click,function()
-                    open = not open
-                    if open then createPopup()
-                    elseif popup then popup:Destroy(); popup=nil end
-                end)
-
-                function data:Set(value, call)
-                    if typeof(value) == "Color3" then
-                        setColor(value,call ~= false)
-                    elseif type(value) == "table" and tonumber(value.r) and tonumber(value.g) and tonumber(value.b) then
-                        setColor(Color3.new(
-                            math.clamp(value.r,0,1),
-                            math.clamp(value.g,0,1),
-                            math.clamp(value.b,0,1)
-                        ),call ~= false)
-                    end
-                end
-
-                function data:Get()
-                    return data.Color
-                end
-
-                function data:RefreshTheme()
-                    b.BackgroundColor3 = CurrentTheme.ElementBackground
-                    bs.Color = CurrentTheme.ElementStroke
-                    t.TextColor3 = CurrentTheme.TextColor
-                    ps.Color = CurrentTheme.ElementStroke
-                    preview.BackgroundColor3 = data.Color
-                end
-
-                updatePreview()
-                return data
-            end
-
-            function SectionData:ConfigColorPicker(label, default, callback, key)
-                local cfgKey = key or label
-                local saved = CrackedLib.Config.Data[cfgKey]
-
-                local initial = default
-
-                if type(saved) == "table"
-                    and tonumber(saved.r)
-                    and tonumber(saved.g)
-                    and tonumber(saved.b) then
-
-                    initial = Color3.new(
-                        math.clamp(tonumber(saved.r), 0, 1),
-                        math.clamp(tonumber(saved.g), 0, 1),
-                        math.clamp(tonumber(saved.b), 0, 1)
-                    )
-                end
-
-                if typeof(initial) ~= "Color3" then
-                    initial = Color3.new(1, 1, 1)
-                end
-
-                local data = self:ColorPicker(label, initial, function(color)
-                    CrackedLib.Config.Data[cfgKey] = {
-                        r = color.R,
-                        g = color.G,
-                        b = color.B
-                    }
-
-                    CrackedLib.Config:Save()
-
-                    if callback then
-                        callback(color)
-                    end
-                end)
-
-                -- Only create the default entry if nothing was saved before.
-                if saved == nil then
-                    CrackedLib.Config.Data[cfgKey] = {
-                        r = initial.R,
-                        g = initial.G,
-                        b = initial.B
-                    }
-
-                    CrackedLib.Config:Save()
-                end
-
-                -- Fire callback once with the loaded value
-                if callback then
-                    task.defer(function()
-                        callback(initial)
-                    end)
-                end
-
-                return data
-            end
-
-            function SectionData:ConfigToggle(label, default, callback, key)
-                local cfgKey = key or label
-                local saved = CrackedLib.Config.Data[cfgKey]
-
-                local value
-
-                if type(saved) == "boolean" then
-                    value = saved
-                else
-                    value = default == true
-                end
-
-                local data = self:Toggle(label, value, function(v)
-                    CrackedLib.Config.Data[cfgKey] = v
-                    CrackedLib.Config:Save()
-
-                    if callback then
-                        callback(v)
-                    end
-                end)
-
-                -- Fire callback once with the loaded value so features actually start
-                if callback then
-                    task.defer(function()
-                        callback(value)
-                    end)
-                end
-
-                return data
-            end
-
-            function SectionData:ConfigDropdown(label, options, callback, MultiSelect, key)
-                local cfgKey = key or label
-                local saved = CrackedLib.Config.Data[cfgKey]
-
-                local data = self:Dropdown(
-                    label,
-                    options,
-                    function(v)
-                        CrackedLib.Config.Data[cfgKey] = v
-                        CrackedLib.Config:Save()
-
-                        if callback then
-                            callback(v)
-                        end
-                    end,
-                    MultiSelect
-                )
-
-                if saved ~= nil then
-                    task.defer(function()
-                        if data then
-                            data:Set(saved)
-                            -- data:Set already fires the callback, so no extra call needed
-                        end
-                    end)
-                elseif callback then
-                    -- No saved value, still fire once with current (nil / empty) state
-                    task.defer(function()
-                        callback(data:Get())
-                    end)
-                end
-
-                return data
-            end
-
-            function SectionData:ConfigSlider(label, min, max, default, callback, key)
-                local cfgKey = key or label
-                local saved = CrackedLib.Config.Data[cfgKey]
-
-                min = tonumber(min) or 0
-                max = tonumber(max) or 100
-
-                if max < min then
-                    min, max = max, min
-                end
-
-                local value
-
-                if type(saved) == "number" then
-                    value = saved
-                else
-                    value = tonumber(default) or min
-                end
-
-                value = math.clamp(value, min, max)
-
-                local data = self:Slider(label, min, max, value, function(v)
-                    CrackedLib.Config.Data[cfgKey] = v
-                    CrackedLib.Config:Save()
-
-                    if callback then
-                        callback(v)
-                    end
-                end)
-
-                -- Fire callback once with the loaded value
-                if callback then
-                    task.defer(function()
-                        callback(value)
-                    end)
-                end
-
                 return data
             end
 
@@ -1859,45 +1550,99 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
     end
 
     function GUI:SetTheme(newTheme)
-        local t=self.Theme and self.Theme[newTheme] or CrackedLib.Theme[newTheme]
+        local t = self.Theme and self.Theme[newTheme] or CrackedLib.Theme[newTheme]
         if not t then return false end
-        CurrentTheme=t
-        CrackedLib.CurrentTheme=t
-        title.TextColor3=t.TextColor; Topbar.BackgroundColor3=t.Topbar; Line.BackgroundColor3=t.Line; Navigation.BackgroundColor3=t.Navigation; Main.BackgroundColor3=t.Background
-        for _,info in ipairs(tabs) do info.Button.BackgroundColor3=info==selectedTab and t.TabBackgroundSelected or t.TabBackground; info.Button.TextColor3=info==selectedTab and t.SelectedTabTextColor or t.TabTextColor; info.Stroke.Color=info==selectedTab and t.TabBackgroundSelected or t.TabStroke; info.Content.BackgroundColor3=t.Background end
+        CurrentTheme = t
+        CrackedLib.CurrentTheme = t
+        title.TextColor3 = t.TextColor
+        Topbar.BackgroundColor3 = t.Topbar
+        Line.BackgroundColor3 = t.Line
+        Navigation.BackgroundColor3 = t.Navigation
+        Main.BackgroundColor3 = t.Background
+        for _,info in ipairs(tabs) do
+            info.Button.BackgroundColor3 = info == selectedTab and t.TabBackgroundSelected or t.TabBackground
+            info.Button.TextColor3 = info == selectedTab and t.SelectedTabTextColor or t.TabTextColor
+            info.Stroke.Color = info == selectedTab and t.TabBackgroundSelected or t.TabStroke
+            info.Content.BackgroundColor3 = t.Background
+        end
         return true
+    end
+
+    -- Notification
+    function GUI:Notify(title, content, duration)
+        duration = duration or 4
+        local notif = Instance.new("Frame")
+        notif.Size = UDim2.fromOffset(280, 70)
+        notif.Position = UDim2.new(1, -300, 1, -90)
+        notif.BackgroundColor3 = CurrentTheme.ElementBackground
+        notif.BorderSizePixel = 0
+        notif.Parent = ScreenGui
+        makeCorner(notif, 8)
+        makeStroke(notif, CurrentTheme.ElementStroke, 2)
+
+        local t = Instance.new("TextLabel")
+        t.BackgroundTransparency = 1
+        t.Position = UDim2.fromOffset(12, 6)
+        t.Size = UDim2.new(1, -24, 0, 22)
+        t.Text = tostring(title or "Notification")
+        t.TextColor3 = CurrentTheme.TextColor
+        t.TextScaled = true
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.Parent = notif
+
+        local c = Instance.new("TextLabel")
+        c.BackgroundTransparency = 1
+        c.Position = UDim2.fromOffset(12, 30)
+        c.Size = UDim2.new(1, -24, 0, 30)
+        c.Text = tostring(content or "")
+        c.TextColor3 = CurrentTheme.TextColor
+        c.TextScaled = true
+        c.TextWrapped = true
+        c.TextXAlignment = Enum.TextXAlignment.Left
+        c.Parent = notif
+
+        task.delay(duration, function()
+            if notif and notif.Parent then notif:Destroy() end
+        end)
     end
 
     GUI.ScreenGui = ScreenGui
     GUI.Main = Main
 
     if draggable then
-        local dragging=false
-        local dragStart=nil
-        local startPos=nil
-        connectAndTrack(connections,Topbar.InputBegan,function(input)
-            if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then dragging=true; dragStart=input.Position; startPos=Main.Position end
+        local dragging = false
+        local dragStart, startPos
+        connectAndTrack(connections, Topbar.InputBegan, function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = Main.Position
+            end
         end)
-        connectAndTrack(connections,Topbar.InputEnded,function(input)
-            if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then dragging=false end
+        connectAndTrack(connections, Topbar.InputEnded, function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
         end)
-        connectAndTrack(connections,UserInputService.InputChanged,function(input)
-            if dragging and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then
-                local d=input.Position-dragStart
-                Main.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
+        connectAndTrack(connections, UserInputService.InputChanged, function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local d = input.Position - dragStart
+                Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
             end
         end)
     end
 
     if keybind then
-        connectAndTrack(connections,UserInputService.InputBegan,function(input,processed)
-            if not processed and input.KeyCode==keybind and not destroyed then ScreenGui.Enabled=not ScreenGui.Enabled end
+        connectAndTrack(connections, UserInputService.InputBegan, function(input, processed)
+            if not processed and input.KeyCode == keybind and not destroyed then
+                ScreenGui.Enabled = not ScreenGui.Enabled
+            end
         end)
     end
 
     function GUI:Destroy()
         if destroyed then return end
-        destroyed=true
+        destroyed = true
         disconnectAll(connections)
         if ScreenGui then ScreenGui:Destroy() end
     end
@@ -1905,8 +1650,8 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
     local minimized = false
     local normalSize = Main.Size
 
-    connectAndTrack(connections,Exit.MouseButton1Click,function() GUI:Destroy() end)
-    connectAndTrack(connections,Minus.MouseButton1Click,function()
+    connectAndTrack(connections, Exit.MouseButton1Click, function() GUI:Destroy() end)
+    connectAndTrack(connections, Minus.MouseButton1Click, function()
         minimized = not minimized
         Navigation.Visible = not minimized
         TabHolder.Visible = not minimized
@@ -1915,55 +1660,17 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
         Minus.Text = minimized and "+" or "−"
     end)
 
-    function GUI:SaveConfig()
-        return CrackedLib.Config:Save()
-    end
-
-    function GUI:LoadConfig()
-        return CrackedLib.Config:Load()
-    end
-
-    function GUI:ClearConfig()
-        return CrackedLib.Config:Clear()
-    end
-
-    function GUI:GetConfig()
-        return CrackedLib.Config.Data
-    end
-
-    function GUI:Show()
-        ScreenGui.Enabled = true
-    end
-
-    function GUI:Hide()
-        ScreenGui.Enabled = false
-    end
+    function GUI:SaveConfig() return CrackedLib.Config:Save() end
+    function GUI:LoadConfig() return CrackedLib.Config:Load() end
+    function GUI:ClearConfig() return CrackedLib.Config:Clear() end
+    function GUI:GetConfig() return CrackedLib.Config.Data end
+    function GUI:Show() ScreenGui.Enabled = true end
+    function GUI:Hide() ScreenGui.Enabled = false end
 
     ScreenGui.Enabled = true
-    print("[CrackedLib] UI loaded | parent:", ScreenGui.Parent and ScreenGui.Parent:GetFullName() or "nil")
+    print("[CrackedLib] v2.3.0 loaded | parent:", ScreenGui.Parent and ScreenGui.Parent:GetFullName() or "nil")
     return GUI
 end
 
--- Optional local test from the original file, disabled by default.
-CrackedLib.Version = "2.2.0"
-CrackedLib.RunStudioTest = function()
-    local lib=CrackedLib:Init("CrackLib v2",true,Enum.KeyCode.RightShift,"Default",{Enabled=false})
-    if not lib then return end
-    local tab=lib:CreateTab("Test")
-    local section=tab:Section("Controls")
-    section:Button("Button",function() print("Button clicked") end)
-    section:Label("CrackedLib v2")
-    section:Toggle("Toggle",false,function(v) print("Toggle:",v) end)
-    section:Slider("Value",0,100,50,function(v) print("Slider:",v) end)
-    section:Dropdown("Items",{"Sword","Potion","Shield"},function(v) print("Dropdown:",v) end,false)
-    section:Dropdown("Multi",{"Sword","Potion","Shield"},function(v) print("Multi:",v) end,true)
-    section:TextBox("Webhook URL", "", function(v) print("TextBox:", v) end)
-    section:ToggleList("ESP Roles", {"Innocent","Sheriff","Murderer"}, function(opt, state, all)
-        print("ToggleList:", opt, state)
-    end, {Innocent=true})
-    local dd = section:Dropdown("Refreshable", {"A","B"}, function(v) print(v) end, false)
-    section:Button("Refresh DD", function() dd:Refresh({"X","Y","Z"}, true) end)
-    return lib
-end
-
+CrackedLib.Version = "2.3.0"
 return CrackedLib
