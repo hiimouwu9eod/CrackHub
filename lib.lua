@@ -1,5 +1,5 @@
 --[[
-  CrackedLib v2.4.0
+  CrackedLib v2.4.1
   Elements: Toggle, ConfigToggle, Button, Label, Paragraph, Separator,
             Slider, ConfigSlider, Textbox, ConfigTextbox, Keybind,
             Dropdown, ConfigDropdown, ToggleList, ColorPicker, ConfigColorPicker
@@ -7,7 +7,7 @@
 ]]
 
 local CrackedLib = {}
-CrackedLib.Version = "2.4.0"
+CrackedLib.Version = "2.4.1"
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -633,11 +633,16 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				local cfgKey = key or label
 				local saved = CrackedLib.Config.Data[cfgKey]
 				local start = saved ~= nil and (saved == true) or (default == true)
-				return self:Toggle(label, start, function(v)
+				local data = self:Toggle(label, start, function(v)
 					CrackedLib.Config.Data[cfgKey] = v
 					CrackedLib.Config:Save()
 					if callback then callback(v) end
 				end)
+				-- Fire callback on load so saved ON state actually enables features
+				task.defer(function()
+					if callback then pcall(callback, start) end
+				end)
+				return data
 			end
 
 			-- BUTTON
@@ -833,12 +838,17 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 			function SectionData:ConfigSlider(label, min, max, default, callback, decimals, key)
 				local cfgKey = key or label
 				local saved = CrackedLib.Config.Data[cfgKey]
-				local start = tonumber(saved) or default
-				return self:Slider(label, min, max, start, function(v)
+				local start = tonumber(saved)
+				if start == nil then start = default end
+				local data = self:Slider(label, min, max, start, function(v)
 					CrackedLib.Config.Data[cfgKey] = v
 					CrackedLib.Config:Save()
 					if callback then callback(v) end
 				end, decimals)
+				task.defer(function()
+					if callback then pcall(callback, start) end
+				end)
+				return data
 			end
 
 			-- TEXTBOX
@@ -894,11 +904,15 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				local cfgKey = key or label
 				local saved = CrackedLib.Config.Data[cfgKey]
 				local start = saved ~= nil and tostring(saved) or tostring(default or "")
-				return self:Textbox(label, placeholder, start, function(v, enter)
+				local data = self:Textbox(label, placeholder, start, function(v, enter)
 					CrackedLib.Config.Data[cfgKey] = v
 					CrackedLib.Config:Save()
 					if callback then callback(v, enter) end
 				end)
+				task.defer(function()
+					if callback then pcall(callback, start, false) end
+				end)
+				return data
 			end
 
 			-- KEYBIND
@@ -1087,7 +1101,14 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 					CrackedLib.Config:Save()
 					if callback then callback(v) end
 				end, multi)
-				if saved ~= nil then task.defer(function() data:Set(saved) end) end
+				if saved ~= nil then
+					task.defer(function()
+						data:Set(saved)
+						if callback then
+							pcall(callback, multi and data.Values or data.Value)
+						end
+					end)
+				end
 				return data
 			end
 
@@ -1240,11 +1261,15 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				local cfgKey = key or label
 				local saved = CrackedLib.Config.Data[cfgKey]
 				local start = saved and tableToColor(saved) or default
-				return self:ColorPicker(label, start, function(c)
+				local data = self:ColorPicker(label, start, function(c)
 					CrackedLib.Config.Data[cfgKey] = colorToTable(c)
 					CrackedLib.Config:Save()
 					if callback then callback(c) end
 				end)
+				task.defer(function()
+					if callback then pcall(callback, start) end
+				end)
+				return data
 			end
 
 			-- TOGGLE LIST (compact)
