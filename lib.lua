@@ -1,5 +1,5 @@
 --[[
-  CrackedLib v2.4.1
+  CrackedLib v2.5.0
   Elements: Toggle, ConfigToggle, Button, Label, Paragraph, Separator,
             Slider, ConfigSlider, Textbox, ConfigTextbox, Keybind,
             Dropdown, ConfigDropdown, ToggleList, ColorPicker, ConfigColorPicker
@@ -7,7 +7,45 @@
 ]]
 
 local CrackedLib = {}
-CrackedLib.Version = "2.4.1"
+CrackedLib.Version = "2.5.0"
+
+
+CrackedLib._Active = CrackedLib._Active or {}
+
+function CrackedLib:UnloadAll()
+	local list = {}
+	for gui, _ in pairs(self._Active) do
+		table.insert(list, gui)
+	end
+	for _, gui in ipairs(list) do
+		pcall(function()
+			if gui.Unload then
+				gui:Unload()
+			elseif gui.Destroy then
+				gui:Destroy()
+			end
+		end)
+	end
+	table.clear(self._Active)
+	-- wipe known ScreenGuis
+	local Players = game:GetService("Players")
+	local lp = Players.LocalPlayer
+	local parents = { lp and lp:FindFirstChild("PlayerGui"), game:GetService("CoreGui") }
+	pcall(function()
+		if type(gethui) == "function" then
+			table.insert(parents, gethui())
+		end
+	end)
+	for _, parent in ipairs(parents) do
+		if parent then
+			for _, name in ipairs({ "CrackLib", "KeySystem", "CracksRoundTimer" }) do
+				local o = parent:FindFirstChild(name)
+				if o then pcall(function() o:Destroy() end) end
+			end
+		end
+	end
+	return true
+end
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -1450,7 +1488,16 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 		disconnectAll(connections)
 		table.clear(themedElements)
 		table.clear(sectionButtonInfos)
+		pcall(function()
+			if CrackedLib._Active then
+				CrackedLib._Active[GUI] = nil
+			end
+		end)
 		if ScreenGui then ScreenGui:Destroy() end
+	end
+
+	function GUI:Unload()
+		self:Destroy()
 	end
 
 	function GUI:SaveConfig() return CrackedLib.Config:Save() end
@@ -1462,6 +1509,8 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 
 	GUI.ScreenGui = ScreenGui
 	GUI.Main = Main
+	CrackedLib._Active = CrackedLib._Active or {}
+	CrackedLib._Active[GUI] = true
 	print("[CrackedLib]", CrackedLib.Version, "loaded")
 	return GUI
 end
