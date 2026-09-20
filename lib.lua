@@ -1,16 +1,49 @@
 --[[
-  CrackedLib v2.5.0
+  CrackedLib v2.6.0
+  + Sounds (click / toggle / hover)
+  + Avatar preview (LocalPlayer thumbnail)
+  + Full theme refresh on every element
+  + Volume control
   Elements: Toggle, ConfigToggle, Button, Label, Paragraph, Separator,
             Slider, ConfigSlider, Textbox, ConfigTextbox, Keybind,
             Dropdown, ConfigDropdown, ToggleList, ColorPicker, ConfigColorPicker
-  Theme: full refresh on every registered element
 ]]
 
 local CrackedLib = {}
-CrackedLib.Version = "2.5.0"
-
-
+CrackedLib.Version = "2.6.0"
 CrackedLib._Active = CrackedLib._Active or {}
+
+-- =============================================================================
+-- SOUNDS
+-- =============================================================================
+local SoundService = game:GetService("SoundService")
+
+CrackedLib.Sounds = {
+	Enabled = true,
+	Volume = 0.35,
+	Click = "rbxassetid://6895079853",
+	ToggleOn = "rbxassetid://9113089209",
+	ToggleOff = "rbxassetid://9113089209",
+	Hover = "rbxassetid://10066921516",
+	Notify = "rbxassetid://4590662766",
+	Open = "rbxassetid://6042053626",
+}
+
+local function playSound(kind)
+	if not CrackedLib.Sounds.Enabled then return end
+	local id = CrackedLib.Sounds[kind]
+	if not id or id == "" then return end
+	pcall(function()
+		local s = Instance.new("Sound")
+		s.SoundId = id
+		s.Volume = CrackedLib.Sounds.Volume
+		s.PlayOnRemove = true
+		s.Parent = SoundService
+		s:Destroy()
+	end)
+end
+
+CrackedLib.PlaySound = playSound
 
 function CrackedLib:UnloadAll()
 	local list = {}
@@ -19,22 +52,16 @@ function CrackedLib:UnloadAll()
 	end
 	for _, gui in ipairs(list) do
 		pcall(function()
-			if gui.Unload then
-				gui:Unload()
-			elseif gui.Destroy then
-				gui:Destroy()
-			end
+			if gui.Unload then gui:Unload()
+			elseif gui.Destroy then gui:Destroy() end
 		end)
 	end
 	table.clear(self._Active)
-	-- wipe known ScreenGuis
 	local Players = game:GetService("Players")
 	local lp = Players.LocalPlayer
 	local parents = { lp and lp:FindFirstChild("PlayerGui"), game:GetService("CoreGui") }
 	pcall(function()
-		if type(gethui) == "function" then
-			table.insert(parents, gethui())
-		end
+		if type(gethui) == "function" then table.insert(parents, gethui()) end
 	end)
 	for _, parent in ipairs(parents) do
 		if parent then
@@ -236,10 +263,20 @@ end
 
 local function tableToColor(t)
 	if typeof(t) == "Color3" then return t end
-	if type(t) == "table" and t.R then
-		return Color3.new(t.R, t.G, t.B)
-	end
+	if type(t) == "table" and t.R then return Color3.new(t.R, t.G, t.B) end
 	return Color3.new(1, 1, 1)
+end
+
+local function hoverBind(frame, stroke, themeRef, list)
+	connectAndTrack(list, frame.MouseEnter, function()
+		playSound("Hover")
+		frame.BackgroundColor3 = themeRef().ElementBackgroundHover
+		if stroke then stroke.Color = themeRef().ElementStrokeHover end
+	end)
+	connectAndTrack(list, frame.MouseLeave, function()
+		frame.BackgroundColor3 = themeRef().ElementBackground
+		if stroke then stroke.Color = themeRef().ElementStroke end
+	end)
 end
 
 -- =============================================================================
@@ -255,6 +292,10 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 	local sectionButtonInfos = {}
 	local connections = {}
 	local destroyed = false
+	local tabs = {}
+	local selectedTab = nil
+
+	local function themeRef() return CurrentTheme end
 
 	local function registerTheme(data)
 		if data and type(data.RefreshTheme) == "function" then
@@ -309,14 +350,14 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 
 	for _, parent in ipairs({ GuiParent, game:GetService("CoreGui"), LocalPlayer:FindFirstChild("PlayerGui") }) do
 		if parent then
-			local old = parent:FindFirstChild("CrackLib")
-			if old then pcall(function() old:Destroy() end) end
-			local oldKey = parent:FindFirstChild("KeySystem")
-			if oldKey then pcall(function() oldKey:Destroy() end) end
+			for _, n in ipairs({ "CrackLib", "KeySystem" }) do
+				local old = parent:FindFirstChild(n)
+				if old then pcall(function() old:Destroy() end) end
+			end
 		end
 	end
 
-	-- Key system (optional)
+	-- Key system
 	if type(keysystem) == "table" and keysystem.Enabled then
 		local Key = tostring(keysystem.Key or "")
 		local KeyPassed, Cancelled = false, false
@@ -367,8 +408,10 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 		close.Parent = KM
 
 		connectAndTrack(connections, loadBtn.MouseButton1Click, function()
+			playSound("Click")
 			if box.Text:gsub("%s+", "") == Key then
 				KeyPassed = true
+				playSound("Open")
 				KeySystem:Destroy()
 			end
 		end)
@@ -408,16 +451,68 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 	Topbar.Parent = Main
 	makeCorner(Topbar, 10)
 
+	-- ===== AVATAR PREVIEW =====
+	local AvatarFrame = Instance.new("Frame")
+	AvatarFrame.Name = "AvatarPreview"
+	AvatarFrame.Position = UDim2.new(0, 10, 0, 6)
+	AvatarFrame.Size = UDim2.fromOffset(40, 40)
+	AvatarFrame.BackgroundColor3 = CurrentTheme.ElementBackground
+	AvatarFrame.BorderSizePixel = 0
+	AvatarFrame.Parent = Topbar
+	makeCorner(AvatarFrame, 20)
+	local AvatarStroke = makeStroke(AvatarFrame, CurrentTheme.ElementStroke, 1)
+
+	local AvatarImage = Instance.new("ImageLabel")
+	AvatarImage.Name = "Image"
+	AvatarImage.BackgroundTransparency = 1
+	AvatarImage.Size = UDim2.fromScale(1, 1)
+	AvatarImage.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+	AvatarImage.Parent = AvatarFrame
+	makeCorner(AvatarImage, 20)
+
+	task.spawn(function()
+		local ok, url = pcall(function()
+			return Players:GetUserThumbnailAsync(
+				LocalPlayer.UserId,
+				Enum.ThumbnailType.HeadShot,
+				Enum.ThumbnailSize.Size48x48
+			)
+		end)
+		if ok and url then
+			AvatarImage.Image = url
+		else
+			-- fallback
+			pcall(function()
+				AvatarImage.Image = string.format(
+					"https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=48&height=48&format=png",
+					LocalPlayer.UserId
+				)
+			end)
+		end
+	end)
+
 	local title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
-	title.Position = UDim2.new(0, 14, 0, 7)
-	title.Size = UDim2.new(0.68, 0, 1, -14)
+	title.Position = UDim2.new(0, 58, 0, 4)
+	title.Size = UDim2.new(0.55, 0, 0, 22)
 	title.Font = Enum.Font.SourceSansBold
 	title.Text = tostring(name or "CrackedLib")
 	title.TextColor3 = CurrentTheme.TextColor
 	title.TextScaled = true
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Parent = Topbar
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.BackgroundTransparency = 1
+	subtitle.Position = UDim2.new(0, 58, 0, 26)
+	subtitle.Size = UDim2.new(0.55, 0, 0, 18)
+	subtitle.Font = Enum.Font.SourceSans
+	subtitle.Text = (LocalPlayer.DisplayName or LocalPlayer.Name) .. "  •  v" .. CrackedLib.Version
+	subtitle.TextColor3 = CurrentTheme.TextColor
+	subtitle.TextTransparency = 0.35
+	subtitle.TextScaled = true
+	subtitle.TextXAlignment = Enum.TextXAlignment.Left
+	subtitle.Parent = Topbar
 
 	local Minus = Instance.new("TextButton")
 	Minus.BackgroundTransparency = 1
@@ -444,156 +539,130 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 	Line.BorderSizePixel = 0
 	Line.Parent = Main
 
-	local Navigation = Instance.new("Frame")
+	local Navigation = Instance.new("ScrollingFrame")
 	Navigation.Position = UDim2.new(0, 0, 0, 52)
 	Navigation.Size = UDim2.new(0.255, 0, 1, -52)
 	Navigation.BackgroundColor3 = CurrentTheme.Navigation
 	Navigation.BorderSizePixel = 0
+	Navigation.ScrollBarThickness = 3
+	Navigation.ScrollBarImageColor3 = CurrentTheme.Line
+	Navigation.CanvasSize = UDim2.new(0, 0, 0, 0)
+	Navigation.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	Navigation.Parent = Main
-	makeCorner(Navigation, 8)
 
-	local ButtonHolder = Instance.new("ScrollingFrame")
-	ButtonHolder.Size = UDim2.fromScale(1, 1)
-	ButtonHolder.BackgroundTransparency = 1
-	ButtonHolder.BorderSizePixel = 0
-	ButtonHolder.ScrollBarThickness = 0
-	ButtonHolder.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	ButtonHolder.Parent = Navigation
-	Instance.new("UIListLayout", ButtonHolder).Padding = UDim.new(0, 6)
-	local np = Instance.new("UIPadding", ButtonHolder)
-	np.PaddingTop = UDim.new(0, 8)
-	np.PaddingLeft = UDim.new(0, 8)
-	np.PaddingRight = UDim.new(0, 8)
+	local NavLayout = Instance.new("UIListLayout")
+	NavLayout.Padding = UDim.new(0, 6)
+	NavLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	NavLayout.Parent = Navigation
+
+	local NavPad = Instance.new("UIPadding")
+	NavPad.PaddingTop = UDim.new(0, 8)
+	NavPad.PaddingLeft = UDim.new(0, 8)
+	NavPad.PaddingRight = UDim.new(0, 8)
+	NavPad.Parent = Navigation
 
 	local Divider = Instance.new("Frame")
-	Divider.Position = UDim2.new(1, -2, 0, 0)
-	Divider.Size = UDim2.new(0, 2, 1, 0)
+	Divider.Position = UDim2.new(0.255, 0, 0, 52)
+	Divider.Size = UDim2.new(0, 2, 1, -52)
 	Divider.BackgroundColor3 = CurrentTheme.Line
 	Divider.BorderSizePixel = 0
-	Divider.Parent = Navigation
+	Divider.Parent = Main
 
 	local TabHolder = Instance.new("Frame")
-	TabHolder.Position = UDim2.new(0.255, 0, 0, 52)
-	TabHolder.Size = UDim2.new(0.745, 0, 1, -52)
+	TabHolder.Position = UDim2.new(0.255, 2, 0, 52)
+	TabHolder.Size = UDim2.new(0.745, -2, 1, -52)
 	TabHolder.BackgroundTransparency = 1
 	TabHolder.Parent = Main
 
-	local TabContent = Instance.new("Folder")
-	TabContent.Parent = TabHolder
+	playSound("Open")
 
-	local tabs, selectedTab = {}, nil
-
-	local function selectTab(tabInfo)
-		selectedTab = tabInfo
-		for _, info in ipairs(tabs) do
-			local active = info == tabInfo
-			info.Content.Visible = active
-			info.Button.BackgroundColor3 = active and CurrentTheme.TabBackgroundSelected or CurrentTheme.TabBackground
-			info.Button.TextColor3 = active and CurrentTheme.SelectedTabTextColor or CurrentTheme.TabTextColor
-			info.Stroke.Color = active and CurrentTheme.TabBackgroundSelected or CurrentTheme.TabStroke
-		end
-	end
-
-	function GUI:CreateTab(text)
+	-- =========================================================================
+	-- CREATE TAB
+	-- =========================================================================
+	function GUI:CreateTab(tabName)
 		local TabData = {}
-		local Tab = Instance.new("TextButton")
-		Tab.Size = UDim2.new(1, 0, 0, 38)
-		Tab.BackgroundColor3 = CurrentTheme.TabBackground
-		Tab.BackgroundTransparency = 0.15
-		Tab.BorderSizePixel = 0
-		Tab.Text = tostring(text or "Tab")
-		Tab.TextColor3 = CurrentTheme.TabTextColor
-		Tab.TextScaled = true
-		Tab.AutoButtonColor = false
-		Tab.Parent = ButtonHolder
-		makeCorner(Tab, 7)
-		local stroke = makeStroke(Tab, CurrentTheme.TabStroke, 2)
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, 0, 0, 36)
+		btn.BackgroundColor3 = CurrentTheme.TabBackground
+		btn.BorderSizePixel = 0
+		btn.Text = tostring(tabName or "Tab")
+		btn.TextColor3 = CurrentTheme.TabTextColor
+		btn.TextScaled = true
+		btn.Font = Enum.Font.SourceSansBold
+		btn.AutoButtonColor = false
+		btn.Parent = Navigation
+		makeCorner(btn, 8)
+		local btnStroke = makeStroke(btn, CurrentTheme.TabStroke, 1)
 
-		local content = Instance.new("Frame")
-		content.Size = UDim2.fromScale(1, 1)
-		content.BackgroundColor3 = CurrentTheme.Background
-		content.BorderSizePixel = 0
-		content.Visible = false
-		content.Parent = TabContent
+		local page = Instance.new("ScrollingFrame")
+		page.Size = UDim2.fromScale(1, 1)
+		page.BackgroundColor3 = CurrentTheme.Background
+		page.BorderSizePixel = 0
+		page.ScrollBarThickness = 4
+		page.ScrollBarImageColor3 = CurrentTheme.Line
+		page.CanvasSize = UDim2.new(0, 0, 0, 0)
+		page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		page.Visible = false
+		page.Parent = TabHolder
 
-		local info = { Button = Tab, Content = content, Stroke = stroke }
+		local pageLayout = Instance.new("UIListLayout")
+		pageLayout.Padding = UDim.new(0, 8)
+		pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		pageLayout.Parent = page
+
+		local pagePad = Instance.new("UIPadding")
+		pagePad.PaddingTop = UDim.new(0, 10)
+		pagePad.PaddingBottom = UDim.new(0, 10)
+		pagePad.PaddingLeft = UDim.new(0, 12)
+		pagePad.PaddingRight = UDim.new(0, 12)
+		pagePad.Parent = page
+
+		local info = {
+			Button = btn,
+			Stroke = btnStroke,
+			Content = page,
+			Page = page,
+			Name = tabName,
+		}
 		table.insert(tabs, info)
-		connectAndTrack(connections, Tab.MouseButton1Click, function() selectTab(info) end)
-		if not selectedTab then selectTab(info) end
+		table.insert(sectionButtonInfos, {
+			Button = btn,
+			Stroke = btnStroke,
+			Page = page,
+			IsActive = function() return selectedTab == info end,
+		})
 
-		local sectionBar = Instance.new("Frame")
-		sectionBar.Size = UDim2.new(1, 0, 0, 46)
-		sectionBar.BackgroundTransparency = 1
-		sectionBar.Parent = content
-		local sl = Instance.new("UIListLayout", sectionBar)
-		sl.FillDirection = Enum.FillDirection.Horizontal
-		sl.Padding = UDim.new(0, 8)
-		local sp = Instance.new("UIPadding", sectionBar)
-		sp.PaddingLeft = UDim.new(0, 8)
-		sp.PaddingRight = UDim.new(0, 8)
-
-		local sectionPages = Instance.new("Frame")
-		sectionPages.Position = UDim2.new(0, 0, 0, 46)
-		sectionPages.Size = UDim2.new(1, 0, 1, -46)
-		sectionPages.BackgroundTransparency = 1
-		sectionPages.Parent = content
-
-		local sectionTabs, selectedSection = {}, nil
-
-		local function selectSection(s)
-			selectedSection = s
-			for _, item in ipairs(sectionTabs) do
-				local active = item == s
-				item.Page.Visible = active
-				item.Button.BackgroundColor3 = active and CurrentTheme.TabBackgroundSelected or CurrentTheme.TabBackground
-				item.Button.TextColor3 = active and CurrentTheme.SelectedTabTextColor or CurrentTheme.TabTextColor
-				item.Stroke.Color = active and CurrentTheme.TabBackgroundSelected or CurrentTheme.TabStroke
+		local function selectThis()
+			playSound("Click")
+			for _, t in ipairs(tabs) do
+				t.Content.Visible = false
+				t.Button.BackgroundColor3 = CurrentTheme.TabBackground
+				t.Button.TextColor3 = CurrentTheme.TabTextColor
+				t.Stroke.Color = CurrentTheme.TabStroke
 			end
+			page.Visible = true
+			btn.BackgroundColor3 = CurrentTheme.TabBackgroundSelected
+			btn.TextColor3 = CurrentTheme.SelectedTabTextColor
+			btnStroke.Color = CurrentTheme.TabBackgroundSelected
+			selectedTab = info
 		end
 
+		connectAndTrack(connections, btn.MouseButton1Click, selectThis)
+		if not selectedTab then selectThis() end
+
+		-- SECTION
 		function TabData:Section(sectionName)
 			local SectionData = {}
-			local displayName = tostring(sectionName or "Section")
 
-			local secBtn = Instance.new("TextButton")
-			secBtn.AutomaticSize = Enum.AutomaticSize.X
-			secBtn.Size = UDim2.new(0, 80, 0, 32)
-			secBtn.BackgroundColor3 = CurrentTheme.TabBackground
-			secBtn.BorderSizePixel = 0
-			secBtn.Text = "  " .. displayName .. "  "
-			secBtn.TextColor3 = CurrentTheme.TabTextColor
-			secBtn.TextScaled = true
-			secBtn.AutoButtonColor = false
-			secBtn.Parent = sectionBar
-			makeCorner(secBtn, 6)
-			local secStroke = makeStroke(secBtn, CurrentTheme.TabStroke, 2)
-
-			local page = Instance.new("ScrollingFrame")
-			page.Size = UDim2.fromScale(1, 1)
-			page.BackgroundColor3 = CurrentTheme.Background
-			page.BorderSizePixel = 0
-			page.ScrollBarThickness = 4
-			page.ScrollBarImageColor3 = CurrentTheme.Line
-			page.AutomaticCanvasSize = Enum.AutomaticSize.Y
-			page.Visible = false
-			page.Parent = sectionPages
-			local pl = Instance.new("UIListLayout", page)
-			pl.Padding = UDim.new(0, 8)
-			pl.SortOrder = Enum.SortOrder.LayoutOrder
-			local pp = Instance.new("UIPadding", page)
-			pp.PaddingTop = UDim.new(0, 8)
-			pp.PaddingLeft = UDim.new(0, 10)
-			pp.PaddingRight = UDim.new(0, 10)
-			pp.PaddingBottom = UDim.new(0, 12)
-
-			local secRef = { Button = secBtn, Stroke = secStroke, Page = page }
-			table.insert(sectionTabs, secRef)
-			table.insert(sectionButtonInfos, {
-				Button = secBtn, Stroke = secStroke, Page = page,
-				IsActive = function() return selectedSection == secRef end,
-			})
-			connectAndTrack(connections, secBtn.MouseButton1Click, function() selectSection(secRef) end)
-			if not selectedSection then selectSection(secRef) end
+			local header = Instance.new("TextLabel")
+			header.Size = UDim2.new(1, 0, 0, 22)
+			header.BackgroundTransparency = 1
+			header.Text = tostring(sectionName or "Section")
+			header.TextColor3 = CurrentTheme.TextColor
+			header.TextScaled = true
+			header.Font = Enum.Font.SourceSansBold
+			header.TextXAlignment = Enum.TextXAlignment.Left
+			header.Parent = page
 
 			local function baseFrame(height)
 				local f = Instance.new("Frame")
@@ -611,58 +680,64 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				local data = { Value = default == true, _connections = {} }
 				local f, fs = baseFrame(45)
 				data._frame = f
+				hoverBind(f, fs, themeRef, data._connections)
+
 				local t = Instance.new("TextLabel")
 				t.BackgroundTransparency = 1
-				t.Position = UDim2.new(0, 20, 0, 0)
-				t.Size = UDim2.new(1, -90, 1, 0)
+				t.Position = UDim2.new(0, 16, 0, 0)
+				t.Size = UDim2.new(1, -70, 1, 0)
 				t.Text = tostring(label or "Toggle")
 				t.TextColor3 = CurrentTheme.TextColor
 				t.TextScaled = true
 				t.TextXAlignment = Enum.TextXAlignment.Left
 				t.Parent = f
+
+				local box = Instance.new("Frame")
+				box.AnchorPoint = Vector2.new(1, 0.5)
+				box.Position = UDim2.new(1, -14, 0.5, 0)
+				box.Size = UDim2.fromOffset(40, 22)
+				box.BackgroundColor3 = data.Value and (CurrentTheme.Accent or CurrentTheme.TabBackgroundSelected) or CurrentTheme.ElementStroke
+				box.BorderSizePixel = 0
+				box.Parent = f
+				makeCorner(box, 11)
+
 				local knob = Instance.new("Frame")
-				knob.AnchorPoint = Vector2.new(1, 0.5)
-				knob.Position = UDim2.new(1, -14, 0.5, 0)
-				knob.Size = UDim2.fromOffset(44, 24)
+				knob.Size = UDim2.fromOffset(18, 18)
+				knob.Position = data.Value and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+				knob.BackgroundColor3 = Color3.new(1, 1, 1)
 				knob.BorderSizePixel = 0
-				knob.Parent = f
-				makeCorner(knob, 12)
-				local ks = makeStroke(knob, CurrentTheme.ElementStroke, 1)
-				local dot = Instance.new("Frame")
-				dot.Size = UDim2.fromOffset(18, 18)
-				dot.AnchorPoint = Vector2.new(0, 0.5)
-				dot.BackgroundColor3 = Color3.new(1, 1, 1)
-				dot.BorderSizePixel = 0
-				dot.Parent = knob
-				makeCorner(dot, 9)
-				local function paint()
-					knob.BackgroundColor3 = data.Value and (CurrentTheme.Accent or CurrentTheme.TabBackgroundSelected) or CurrentTheme.Background
-					dot.Position = data.Value and UDim2.new(1, -21, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
+				knob.Parent = box
+				makeCorner(knob, 9)
+
+				local function applyVisual()
+					box.BackgroundColor3 = data.Value and (CurrentTheme.Accent or CurrentTheme.TabBackgroundSelected) or CurrentTheme.ElementStroke
+					knob.Position = data.Value and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
 				end
-				paint()
-				local btn = Instance.new("TextButton")
-				btn.Size = UDim2.fromScale(1, 1)
-				btn.BackgroundTransparency = 1
-				btn.Text = ""
-				btn.Parent = f
-				connectAndTrack(data._connections, btn.MouseButton1Click, function()
-					data.Value = not data.Value
-					paint()
-					if callback then task.spawn(callback, data.Value) end
-				end)
-				function data:Set(v)
+
+				local function set(v, fire)
 					data.Value = v and true or false
-					paint()
-					if callback then task.spawn(callback, data.Value) end
+					applyVisual()
+					playSound(data.Value and "ToggleOn" or "ToggleOff")
+					if fire and callback then task.spawn(callback, data.Value) end
 				end
+
+				local hit = Instance.new("TextButton")
+				hit.Size = UDim2.fromScale(1, 1)
+				hit.BackgroundTransparency = 1
+				hit.Text = ""
+				hit.Parent = f
+				connectAndTrack(data._connections, hit.MouseButton1Click, function()
+					set(not data.Value, true)
+				end)
+
+				function data:Set(v) set(v, true) end
 				function data:Get() return data.Value end
 				function data:Destroy() destroyElement(data) end
 				function data:RefreshTheme()
 					f.BackgroundColor3 = CurrentTheme.ElementBackground
 					fs.Color = CurrentTheme.ElementStroke
 					t.TextColor3 = CurrentTheme.TextColor
-					ks.Color = CurrentTheme.ElementStroke
-					paint()
+					applyVisual()
 				end
 				return registerTheme(data)
 			end
@@ -670,15 +745,14 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 			function SectionData:ConfigToggle(label, default, callback, key)
 				local cfgKey = key or label
 				local saved = CrackedLib.Config.Data[cfgKey]
-				local start = saved ~= nil and (saved == true) or (default == true)
+				local start = saved ~= nil and saved or default
 				local data = self:Toggle(label, start, function(v)
 					CrackedLib.Config.Data[cfgKey] = v
 					CrackedLib.Config:Save()
 					if callback then callback(v) end
 				end)
-				-- Fire callback on load so saved ON state actually enables features
 				task.defer(function()
-					if callback then pcall(callback, start) end
+					if callback then pcall(callback, data.Value) end
 				end)
 				return data
 			end
@@ -686,51 +760,21 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 			-- BUTTON
 			function SectionData:Button(label, callback)
 				local data = { _connections = {} }
-				local b = Instance.new("TextButton")
-				b.Size = UDim2.new(1, 0, 0, 45)
-				b.BackgroundColor3 = CurrentTheme.ElementBackground
-				b.BorderSizePixel = 0
-				b.Text = tostring(label or "Button")
-				b.TextColor3 = CurrentTheme.TextColor
-				b.TextScaled = true
-				b.AutoButtonColor = false
-				b.Parent = page
-				makeCorner(b, 8)
-				local bs = makeStroke(b, CurrentTheme.ElementStroke, 2)
-				data._frame = b
-				connectAndTrack(data._connections, b.MouseButton1Click, function()
-					if callback then task.spawn(callback) end
-				end)
-				connectAndTrack(data._connections, b.MouseEnter, function()
-					b.BackgroundColor3 = CurrentTheme.ElementBackgroundHover
-				end)
-				connectAndTrack(data._connections, b.MouseLeave, function()
-					b.BackgroundColor3 = CurrentTheme.ElementBackground
-				end)
-				function data:Destroy() destroyElement(data) end
-				function data:RefreshTheme()
-					b.BackgroundColor3 = CurrentTheme.ElementBackground
-					b.TextColor3 = CurrentTheme.TextColor
-					bs.Color = CurrentTheme.ElementStroke
-				end
-				return registerTheme(data)
-			end
-
-			-- LABEL / PARAGRAPH
-			function SectionData:Label(text)
-				local data = { _connections = {} }
-				local f, fs = baseFrame(36)
+				local f, fs = baseFrame(42)
 				data._frame = f
-				local t = Instance.new("TextLabel")
+				hoverBind(f, fs, themeRef, data._connections)
+				local t = Instance.new("TextButton")
+				t.Size = UDim2.fromScale(1, 1)
 				t.BackgroundTransparency = 1
-				t.Size = UDim2.new(1, -20, 1, 0)
-				t.Position = UDim2.new(0, 10, 0, 0)
-				t.Text = tostring(text or "")
+				t.Text = tostring(label or "Button")
 				t.TextColor3 = CurrentTheme.TextColor
 				t.TextScaled = true
-				t.TextXAlignment = Enum.TextXAlignment.Left
+				t.Font = Enum.Font.SourceSansBold
 				t.Parent = f
-				function data:SetText(v) t.Text = tostring(v) end
+				connectAndTrack(data._connections, t.MouseButton1Click, function()
+					playSound("Click")
+					if callback then task.spawn(callback) end
+				end)
 				function data:Destroy() destroyElement(data) end
 				function data:RefreshTheme()
 					f.BackgroundColor3 = CurrentTheme.ElementBackground
@@ -739,7 +783,67 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				end
 				return registerTheme(data)
 			end
-			function SectionData:Paragraph(text) return self:Label(text) end
+
+			-- LABEL
+			function SectionData:Label(label)
+				local data = { _connections = {} }
+				local f, fs = baseFrame(45)
+				data._frame = f
+				local t = Instance.new("TextLabel")
+				t.BackgroundTransparency = 1
+				t.Size = UDim2.new(1, -48, 1, 0)
+				t.Position = UDim2.new(0, 24, 0, 0)
+				t.Text = tostring(label or "Label")
+				t.TextColor3 = CurrentTheme.TextColor
+				t.TextScaled = true
+				t.TextWrapped = true
+				t.TextXAlignment = Enum.TextXAlignment.Left
+				t.Parent = f
+				function data:SetText(value) t.Text = tostring(value) end
+				function data:Destroy() destroyElement(data) end
+				function data:RefreshTheme()
+					f.BackgroundColor3 = CurrentTheme.ElementBackground
+					fs.Color = CurrentTheme.ElementStroke
+					t.TextColor3 = CurrentTheme.TextColor
+				end
+				return registerTheme(data)
+			end
+
+			-- PARAGRAPH
+			function SectionData:Paragraph(titleText, body)
+				local data = { _connections = {} }
+				local f, fs = baseFrame(70)
+				data._frame = f
+				local t1 = Instance.new("TextLabel")
+				t1.BackgroundTransparency = 1
+				t1.Position = UDim2.new(0, 16, 0, 4)
+				t1.Size = UDim2.new(1, -32, 0, 22)
+				t1.Text = tostring(titleText or "")
+				t1.TextColor3 = CurrentTheme.TextColor
+				t1.TextScaled = true
+				t1.Font = Enum.Font.SourceSansBold
+				t1.TextXAlignment = Enum.TextXAlignment.Left
+				t1.Parent = f
+				local t2 = Instance.new("TextLabel")
+				t2.BackgroundTransparency = 1
+				t2.Position = UDim2.new(0, 16, 0, 28)
+				t2.Size = UDim2.new(1, -32, 0, 36)
+				t2.Text = tostring(body or "")
+				t2.TextColor3 = CurrentTheme.TextColor
+				t2.TextTransparency = 0.25
+				t2.TextScaled = true
+				t2.TextWrapped = true
+				t2.TextXAlignment = Enum.TextXAlignment.Left
+				t2.Parent = f
+				function data:Destroy() destroyElement(data) end
+				function data:RefreshTheme()
+					f.BackgroundColor3 = CurrentTheme.ElementBackground
+					fs.Color = CurrentTheme.ElementStroke
+					t1.TextColor3 = CurrentTheme.TextColor
+					t2.TextColor3 = CurrentTheme.TextColor
+				end
+				return registerTheme(data)
+			end
 
 			-- SEPARATOR
 			function SectionData:Separator()
@@ -752,7 +856,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				local line = Instance.new("Frame")
 				line.AnchorPoint = Vector2.new(0.5, 0.5)
 				line.Position = UDim2.fromScale(0.5, 0.5)
-				line.Size = UDim2.new(1, -16, 0, 2)
+				line.Size = UDim2.new(1, -20, 0, 2)
 				line.BackgroundColor3 = CurrentTheme.Line
 				line.BorderSizePixel = 0
 				line.Parent = f
@@ -763,68 +867,59 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 
 			-- SLIDER
 			function SectionData:Slider(label, min, max, default, callback, decimals)
-				min = tonumber(min) or 0
-				max = tonumber(max) or 100
-				decimals = tonumber(decimals) or 0
+				min, max = min or 0, max or 100
+				decimals = decimals or 0
 				local data = {
-					Value = clamp(tonumber(default) or min, min, max),
+					Value = clamp(default or min, min, max),
 					_connections = {},
 				}
-				local f, fs = baseFrame(58)
+				local f, fs = baseFrame(56)
 				data._frame = f
 
 				local t = Instance.new("TextLabel")
 				t.BackgroundTransparency = 1
 				t.Position = UDim2.new(0, 16, 0, 2)
-				t.Size = UDim2.new(0.65, 0, 0, 22)
+				t.Size = UDim2.new(0.7, 0, 0, 20)
 				t.Text = tostring(label or "Slider")
 				t.TextColor3 = CurrentTheme.TextColor
 				t.TextScaled = true
 				t.TextXAlignment = Enum.TextXAlignment.Left
 				t.Parent = f
 
-				local valLabel = Instance.new("TextLabel")
-				valLabel.BackgroundTransparency = 1
-				valLabel.Position = UDim2.new(0.65, 0, 0, 2)
-				valLabel.Size = UDim2.new(0.32, 0, 0, 22)
-				valLabel.Text = string.format("%." .. decimals .. "f", data.Value)
-				valLabel.TextColor3 = CurrentTheme.TextColor
-				valLabel.TextScaled = true
-				valLabel.TextXAlignment = Enum.TextXAlignment.Right
-				valLabel.Parent = f
+				local val = Instance.new("TextLabel")
+				val.BackgroundTransparency = 1
+				val.Position = UDim2.new(0.7, 0, 0, 2)
+				val.Size = UDim2.new(0.3, -12, 0, 20)
+				val.Text = string.format("%." .. decimals .. "f", data.Value)
+				val.TextColor3 = CurrentTheme.TextColor
+				val.TextScaled = true
+				val.TextXAlignment = Enum.TextXAlignment.Right
+				val.Parent = f
 
 				local track = Instance.new("Frame")
-				track.Position = UDim2.new(0, 16, 0, 34)
+				track.Position = UDim2.new(0, 16, 0, 32)
 				track.Size = UDim2.new(1, -32, 0, 10)
-				track.BackgroundColor3 = CurrentTheme.Background
+				track.BackgroundColor3 = CurrentTheme.ElementStroke
 				track.BorderSizePixel = 0
 				track.Parent = f
 				makeCorner(track, 5)
-				local trackStroke = makeStroke(track, CurrentTheme.ElementStroke, 1)
 
 				local fill = Instance.new("Frame")
-				fill.Size = UDim2.new(0, 0, 1, 0)
+				fill.Size = UDim2.new((data.Value - min) / math.max(max - min, 1e-6), 0, 1, 0)
 				fill.BackgroundColor3 = CurrentTheme.Accent or CurrentTheme.TabBackgroundSelected
 				fill.BorderSizePixel = 0
 				fill.Parent = track
 				makeCorner(fill, 5)
 
-				local function setFromAlpha(a, fire)
-					a = clamp(a, 0, 1)
+				local function setFromX(x)
+					local a = clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
 					local raw = min + (max - min) * a
-					if decimals <= 0 then
-						raw = math.floor(raw + 0.5)
-					else
-						local m = 10 ^ decimals
-						raw = math.floor(raw * m + 0.5) / m
-					end
-					data.Value = clamp(raw, min, max)
-					local pct = (data.Value - min) / math.max(max - min, 1e-9)
-					fill.Size = UDim2.new(pct, 0, 1, 0)
-					valLabel.Text = string.format("%." .. decimals .. "f", data.Value)
-					if fire and callback then task.spawn(callback, data.Value) end
+					local mult = 10 ^ decimals
+					data.Value = math.floor(raw * mult + 0.5) / mult
+					fill.Size = UDim2.new(a, 0, 1, 0)
+					val.Text = string.format("%." .. decimals .. "f", data.Value)
+					if callback then task.spawn(callback, data.Value) end
 				end
-				setFromAlpha((data.Value - min) / math.max(max - min, 1e-9), false)
 
 				local dragging = false
 				local hit = Instance.new("TextButton")
@@ -832,16 +927,11 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				hit.BackgroundTransparency = 1
 				hit.Text = ""
 				hit.Parent = track
-
-				local function update(input)
-					local rel = (input.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1)
-					setFromAlpha(rel, true)
-				end
-
 				connectAndTrack(data._connections, hit.InputBegan, function(input)
 					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 						dragging = true
-						update(input)
+						playSound("Click")
+						setFromX(input.Position.X)
 					end
 				end)
 				connectAndTrack(data._connections, UserInputService.InputEnded, function(input)
@@ -851,13 +941,16 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				end)
 				connectAndTrack(data._connections, UserInputService.InputChanged, function(input)
 					if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-						update(input)
+						setFromX(input.Position.X)
 					end
 				end)
 
 				function data:Set(v)
-					local a = (clamp(tonumber(v) or min, min, max) - min) / math.max(max - min, 1e-9)
-					setFromAlpha(a, true)
+					data.Value = clamp(v, min, max)
+					local a = (data.Value - min) / math.max(max - min, 1e-6)
+					fill.Size = UDim2.new(a, 0, 1, 0)
+					val.Text = string.format("%." .. decimals .. "f", data.Value)
+					if callback then task.spawn(callback, data.Value) end
 				end
 				function data:Get() return data.Value end
 				function data:Destroy() destroyElement(data) end
@@ -865,9 +958,8 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 					f.BackgroundColor3 = CurrentTheme.ElementBackground
 					fs.Color = CurrentTheme.ElementStroke
 					t.TextColor3 = CurrentTheme.TextColor
-					valLabel.TextColor3 = CurrentTheme.TextColor
-					track.BackgroundColor3 = CurrentTheme.Background
-					trackStroke.Color = CurrentTheme.ElementStroke
+					val.TextColor3 = CurrentTheme.TextColor
+					track.BackgroundColor3 = CurrentTheme.ElementStroke
 					fill.BackgroundColor3 = CurrentTheme.Accent or CurrentTheme.TabBackgroundSelected
 				end
 				return registerTheme(data)
@@ -876,55 +968,49 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 			function SectionData:ConfigSlider(label, min, max, default, callback, decimals, key)
 				local cfgKey = key or label
 				local saved = CrackedLib.Config.Data[cfgKey]
-				local start = tonumber(saved)
-				if start == nil then start = default end
+				local start = type(saved) == "number" and saved or default
 				local data = self:Slider(label, min, max, start, function(v)
 					CrackedLib.Config.Data[cfgKey] = v
 					CrackedLib.Config:Save()
 					if callback then callback(v) end
 				end, decimals)
 				task.defer(function()
-					if callback then pcall(callback, start) end
+					if callback then pcall(callback, data.Value) end
 				end)
 				return data
 			end
 
 			-- TEXTBOX
-			function SectionData:Textbox(label, placeholder, default, callback)
+			function SectionData:Textbox(label, default, callback)
 				local data = { Value = tostring(default or ""), _connections = {} }
-				local f, fs = baseFrame(70)
+				local f, fs = baseFrame(45)
 				data._frame = f
 				local t = Instance.new("TextLabel")
 				t.BackgroundTransparency = 1
-				t.Position = UDim2.new(0, 16, 0, 4)
-				t.Size = UDim2.new(1, -32, 0, 22)
-				t.Text = tostring(label or "Textbox")
+				t.Position = UDim2.new(0, 14, 0, 0)
+				t.Size = UDim2.new(0.4, 0, 1, 0)
+				t.Text = tostring(label or "")
 				t.TextColor3 = CurrentTheme.TextColor
 				t.TextScaled = true
 				t.TextXAlignment = Enum.TextXAlignment.Left
 				t.Parent = f
 				local box = Instance.new("TextBox")
-				box.Position = UDim2.new(0, 16, 0, 30)
-				box.Size = UDim2.new(1, -32, 0, 28)
+				box.Position = UDim2.new(0.42, 0, 0.15, 0)
+				box.Size = UDim2.new(0.55, -8, 0.7, 0)
 				box.BackgroundColor3 = CurrentTheme.Background
-				box.BorderSizePixel = 0
 				box.Text = data.Value
-				box.PlaceholderText = tostring(placeholder or "")
+				box.PlaceholderText = "..."
 				box.TextColor3 = CurrentTheme.TextColor
-				box.PlaceholderColor3 = Color3.fromRGB(140, 140, 140)
 				box.TextScaled = true
 				box.ClearTextOnFocus = false
 				box.Parent = f
 				makeCorner(box, 6)
-				local bs = makeStroke(box, CurrentTheme.ElementStroke, 1)
-				connectAndTrack(data._connections, box.FocusLost, function(enter)
+				connectAndTrack(data._connections, box.FocusLost, function()
 					data.Value = box.Text
-					if callback then task.spawn(callback, data.Value, enter) end
+					playSound("Click")
+					if callback then task.spawn(callback, data.Value) end
 				end)
-				function data:Set(v)
-					data.Value = tostring(v or "")
-					box.Text = data.Value
-				end
+				function data:Set(v) data.Value = tostring(v) box.Text = data.Value end
 				function data:Get() return data.Value end
 				function data:Destroy() destroyElement(data) end
 				function data:RefreshTheme()
@@ -933,30 +1019,29 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 					t.TextColor3 = CurrentTheme.TextColor
 					box.BackgroundColor3 = CurrentTheme.Background
 					box.TextColor3 = CurrentTheme.TextColor
-					bs.Color = CurrentTheme.ElementStroke
 				end
 				return registerTheme(data)
 			end
 
-			function SectionData:ConfigTextbox(label, placeholder, default, callback, key)
+			function SectionData:ConfigTextbox(label, default, callback, key)
 				local cfgKey = key or label
 				local saved = CrackedLib.Config.Data[cfgKey]
 				local start = saved ~= nil and tostring(saved) or tostring(default or "")
-				local data = self:Textbox(label, placeholder, start, function(v, enter)
+				local data = self:Textbox(label, start, function(v)
 					CrackedLib.Config.Data[cfgKey] = v
 					CrackedLib.Config:Save()
-					if callback then callback(v, enter) end
+					if callback then callback(v) end
 				end)
 				task.defer(function()
-					if callback then pcall(callback, start, false) end
+					if callback then pcall(callback, data.Value) end
 				end)
 				return data
 			end
 
 			-- KEYBIND
-			function SectionData:Keybind(label, defaultKey, callback)
+			function SectionData:Keybind(label, default, callback)
 				local data = {
-					Key = defaultKey or Enum.KeyCode.Unknown,
+					Value = typeof(default) == "EnumItem" and default or Enum.KeyCode.Unknown,
 					Listening = false,
 					_connections = {},
 				}
@@ -964,53 +1049,54 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				data._frame = f
 				local t = Instance.new("TextLabel")
 				t.BackgroundTransparency = 1
-				t.Position = UDim2.new(0, 20, 0, 0)
-				t.Size = UDim2.new(0.55, 0, 1, 0)
+				t.Position = UDim2.new(0, 16, 0, 0)
+				t.Size = UDim2.new(1, -100, 1, 0)
 				t.Text = tostring(label or "Keybind")
 				t.TextColor3 = CurrentTheme.TextColor
 				t.TextScaled = true
 				t.TextXAlignment = Enum.TextXAlignment.Left
 				t.Parent = f
-				local keyLabel = Instance.new("TextLabel")
-				keyLabel.BackgroundTransparency = 1
-				keyLabel.Position = UDim2.new(0.55, 0, 0, 0)
-				keyLabel.Size = UDim2.new(0.42, 0, 1, 0)
-				keyLabel.Text = data.Key.Name
-				keyLabel.TextColor3 = CurrentTheme.TextColor
-				keyLabel.TextScaled = true
-				keyLabel.TextXAlignment = Enum.TextXAlignment.Right
-				keyLabel.Parent = f
-				local hit = Instance.new("TextButton")
-				hit.Size = UDim2.fromScale(1, 1)
-				hit.BackgroundTransparency = 1
-				hit.Text = ""
-				hit.Parent = f
-				local function updateText()
-					keyLabel.Text = data.Listening and "..." or data.Key.Name
-				end
-				connectAndTrack(data._connections, hit.MouseButton1Click, function()
+				local keyBtn = Instance.new("TextButton")
+				keyBtn.AnchorPoint = Vector2.new(1, 0.5)
+				keyBtn.Position = UDim2.new(1, -12, 0.5, 0)
+				keyBtn.Size = UDim2.fromOffset(70, 28)
+				keyBtn.BackgroundColor3 = CurrentTheme.Background
+				keyBtn.Text = data.Value.Name
+				keyBtn.TextColor3 = CurrentTheme.TextColor
+				keyBtn.TextScaled = true
+				keyBtn.Parent = f
+				makeCorner(keyBtn, 6)
+
+				connectAndTrack(data._connections, keyBtn.MouseButton1Click, function()
 					data.Listening = true
-					updateText()
+					keyBtn.Text = "..."
+					playSound("Click")
 				end)
-				connectAndTrack(data._connections, UserInputService.InputBegan, function(input)
+				connectAndTrack(data._connections, UserInputService.InputBegan, function(input, gpe)
 					if not data.Listening then return end
 					if input.UserInputType == Enum.UserInputType.Keyboard then
-						data.Key = input.KeyCode
+						data.Value = input.KeyCode
 						data.Listening = false
-						updateText()
-						if callback then task.spawn(callback, data.Key) end
+						keyBtn.Text = data.Value.Name
+						playSound("ToggleOn")
+						if callback then task.spawn(callback, data.Value) end
 					end
 				end)
+
 				function data:Set(k)
-					if typeof(k) == "EnumItem" then data.Key = k updateText() end
+					if typeof(k) == "EnumItem" then
+						data.Value = k
+						keyBtn.Text = k.Name
+					end
 				end
-				function data:Get() return data.Key end
+				function data:Get() return data.Value end
 				function data:Destroy() destroyElement(data) end
 				function data:RefreshTheme()
 					f.BackgroundColor3 = CurrentTheme.ElementBackground
 					fs.Color = CurrentTheme.ElementStroke
 					t.TextColor3 = CurrentTheme.TextColor
-					keyLabel.TextColor3 = CurrentTheme.TextColor
+					keyBtn.BackgroundColor3 = CurrentTheme.Background
+					keyBtn.TextColor3 = CurrentTheme.TextColor
 				end
 				return registerTheme(data)
 			end
@@ -1018,8 +1104,12 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 			-- DROPDOWN
 			function SectionData:Dropdown(label, options, callback, multi)
 				options = type(options) == "table" and options or {}
-				multi = multi == true
-				local data = { Open = false, Value = nil, Values = {}, _connections = {} }
+				local data = {
+					Value = nil,
+					Values = {},
+					Open = false,
+					_connections = {},
+				}
 				local rows = {}
 				local f, fs = baseFrame(45)
 				f.ClipsDescendants = true
@@ -1081,6 +1171,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 						row.AutoButtonColor = false
 						row.Parent = list
 						connectAndTrack(data._connections, row.MouseButton1Click, function()
+							playSound("Click")
 							if multi then
 								data.Values[option] = not data.Values[option]
 							else
@@ -1099,14 +1190,12 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				build()
 				connectAndTrack(data._connections, arrow.MouseButton1Click, function()
 					data.Open = not data.Open
+					playSound("Click")
 					refreshSize()
 				end)
 				function data:Set(v)
-					if multi then
-						data.Values = type(v) == "table" and v or {}
-					else
-						data.Value = v
-					end
+					if multi then data.Values = type(v) == "table" and v or {}
+					else data.Value = v end
 					txt.Text = selectedText()
 				end
 				function data:Get() return multi and data.Values or data.Value end
@@ -1142,15 +1231,13 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				if saved ~= nil then
 					task.defer(function()
 						data:Set(saved)
-						if callback then
-							pcall(callback, multi and data.Values or data.Value)
-						end
+						if callback then pcall(callback, multi and data.Values or data.Value) end
 					end)
 				end
 				return data
 			end
 
-			-- COLOR PICKER (H / S approx via RGB sliders + preview)
+			-- COLOR PICKER
 			function SectionData:ColorPicker(label, default, callback)
 				local data = {
 					Value = typeof(default) == "Color3" and default or Color3.fromRGB(255, 255, 255),
@@ -1261,6 +1348,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 					data.Open = o
 					panel.Size = UDim2.new(1, 0, 0, o and 84 or 0)
 					f.Size = UDim2.new(1, 0, 0, o and 45 + 84 or 45)
+					playSound("Click")
 				end
 
 				local hitTop = Instance.new("TextButton")
@@ -1275,9 +1363,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				function data:Set(c)
 					data.Value = typeof(c) == "Color3" and c or tableToColor(c)
 					preview.BackgroundColor3 = data.Value
-					refreshR()
-					refreshG()
-					refreshB()
+					refreshR() refreshG() refreshB()
 					if callback then task.spawn(callback, data.Value) end
 				end
 				function data:Get() return data.Value end
@@ -1288,9 +1374,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 					t.TextColor3 = CurrentTheme.TextColor
 					ps.Color = CurrentTheme.ElementStroke
 					panel.BackgroundColor3 = CurrentTheme.Background
-					refreshR()
-					refreshG()
-					refreshB()
+					refreshR() refreshG() refreshB()
 				end
 				return registerTheme(data)
 			end
@@ -1310,7 +1394,7 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				return data
 			end
 
-			-- TOGGLE LIST (compact)
+			-- TOGGLE LIST
 			function SectionData:ToggleList(label, options, callback, defaults)
 				options = type(options) == "table" and options or {}
 				defaults = type(defaults) == "table" and defaults or {}
@@ -1359,12 +1443,14 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 					row.Parent = list
 					connectAndTrack(data._connections, row.MouseButton1Click, function()
 						data.States[option] = not data.States[option]
+						playSound(data.States[option] and "ToggleOn" or "ToggleOff")
 						if callback then task.spawn(callback, option, data.States[option], data.States) end
 					end)
 				end
 				refreshSize()
 				connectAndTrack(data._connections, arrow.MouseButton1Click, function()
 					data.Open = not data.Open
+					playSound("Click")
 					refreshSize()
 				end)
 				function data:Get() return data.States end
@@ -1391,27 +1477,55 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 		CurrentTheme = t
 		CrackedLib.CurrentTheme = t
 		title.TextColor3 = t.TextColor
+		subtitle.TextColor3 = t.TextColor
 		Topbar.BackgroundColor3 = t.Topbar
 		Line.BackgroundColor3 = t.Line
 		Navigation.BackgroundColor3 = t.Navigation
+		Navigation.ScrollBarImageColor3 = t.Line
 		Main.BackgroundColor3 = t.Background
 		MainStroke.Color = t.ElementStroke
 		Minus.TextColor3 = t.TextColor
 		Exit.TextColor3 = t.TextColor
 		Divider.BackgroundColor3 = t.Line
+		AvatarFrame.BackgroundColor3 = t.ElementBackground
+		AvatarStroke.Color = t.ElementStroke
 		for _, info in ipairs(tabs) do
 			local active = info == selectedTab
 			info.Button.BackgroundColor3 = active and t.TabBackgroundSelected or t.TabBackground
 			info.Button.TextColor3 = active and t.SelectedTabTextColor or t.TabTextColor
 			info.Stroke.Color = active and t.TabBackgroundSelected or t.TabStroke
 			info.Content.BackgroundColor3 = t.Background
+			info.Content.ScrollBarImageColor3 = t.Line
 		end
 		refreshAllThemes()
+		playSound("Click")
 		return true
+	end
+
+	function GUI:SetSounds(enabled)
+		CrackedLib.Sounds.Enabled = enabled and true or false
+	end
+
+	function GUI:SetVolume(v)
+		CrackedLib.Sounds.Volume = clamp(tonumber(v) or 0.35, 0, 1)
+	end
+
+	function GUI:RefreshAvatar()
+		task.spawn(function()
+			local ok, url = pcall(function()
+				return Players:GetUserThumbnailAsync(
+					LocalPlayer.UserId,
+					Enum.ThumbnailType.HeadShot,
+					Enum.ThumbnailSize.Size48x48
+				)
+			end)
+			if ok and url then AvatarImage.Image = url end
+		end)
 	end
 
 	function GUI:Notify(nTitle, content, duration)
 		duration = duration or 3
+		playSound("Notify")
 		local notif = Instance.new("Frame")
 		notif.Size = UDim2.fromOffset(280, 70)
 		notif.Position = UDim2.new(1, -300, 1, -90)
@@ -1467,17 +1581,23 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 		connectAndTrack(connections, UserInputService.InputBegan, function(input, gpe)
 			if not gpe and input.KeyCode == keybind and not destroyed then
 				ScreenGui.Enabled = not ScreenGui.Enabled
+				playSound("Click")
 			end
 		end)
 	end
 
 	local minimized, normalSize = false, Main.Size
-	connectAndTrack(connections, Exit.MouseButton1Click, function() GUI:Destroy() end)
+	connectAndTrack(connections, Exit.MouseButton1Click, function()
+		playSound("Click")
+		GUI:Destroy()
+	end)
 	connectAndTrack(connections, Minus.MouseButton1Click, function()
+		playSound("Click")
 		minimized = not minimized
 		Navigation.Visible = not minimized
 		TabHolder.Visible = not minimized
 		Line.Visible = not minimized
+		Divider.Visible = not minimized
 		Main.Size = minimized and UDim2.new(normalSize.X.Scale, normalSize.X.Offset, 0, 52) or normalSize
 		Minus.Text = minimized and "+" or "−"
 	end)
@@ -1489,29 +1609,26 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 		table.clear(themedElements)
 		table.clear(sectionButtonInfos)
 		pcall(function()
-			if CrackedLib._Active then
-				CrackedLib._Active[GUI] = nil
-			end
+			if CrackedLib._Active then CrackedLib._Active[GUI] = nil end
 		end)
 		if ScreenGui then ScreenGui:Destroy() end
 	end
 
-	function GUI:Unload()
-		self:Destroy()
-	end
-
+	function GUI:Unload() self:Destroy() end
 	function GUI:SaveConfig() return CrackedLib.Config:Save() end
 	function GUI:LoadConfig() return CrackedLib.Config:Load() end
 	function GUI:ClearConfig() return CrackedLib.Config:Clear() end
 	function GUI:GetConfig() return CrackedLib.Config.Data end
-	function GUI:Show() ScreenGui.Enabled = true end
+	function GUI:Show() ScreenGui.Enabled = true playSound("Open") end
 	function GUI:Hide() ScreenGui.Enabled = false end
+	function GUI:RefreshAll() refreshAllThemes() end
 
 	GUI.ScreenGui = ScreenGui
 	GUI.Main = Main
+	GUI.AvatarImage = AvatarImage
 	CrackedLib._Active = CrackedLib._Active or {}
 	CrackedLib._Active[GUI] = true
-	print("[CrackedLib]", CrackedLib.Version, "loaded")
+	print("[CrackedLib]", CrackedLib.Version, "loaded — sounds + avatar")
 	return GUI
 end
 
