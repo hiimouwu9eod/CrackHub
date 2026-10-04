@@ -36,15 +36,11 @@ local SCRIPT_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs
 local function queueSelf()
 	local code = string.format([[
 		getgenv().CracksTTD_AutoFarm = %s
-		local ok, err = pcall(function()
+		pcall(function()
 			loadstring(game:HttpGet("%s", true))()
 		end)
-		if not ok then
-			warn("[Cracks TTD] queue load failed:", err)
-		end
 	]], tostring(getgenv().CracksTTD_AutoFarm == true), SCRIPT_URL)
 
-	local queued = false
 	local fns = {
 		queue_on_teleport,
 		syn and syn.queue_on_teleport,
@@ -53,19 +49,17 @@ local function queueSelf()
 		getgenv().queue_on_teleport,
 	}
 
+	local queued = false
 	for _, fn in ipairs(fns) do
 		if typeof(fn) == "function" then
-			local ok = pcall(fn, code)
-			if ok then
+			if pcall(fn, code) then
 				queued = true
 			end
 		end
 	end
 
 	if not queued then
-		warn("[Cracks TTD] no queue_on_teleport — put script in AutoExec")
-	else
-		print("[Cracks TTD] queued for next teleport")
+		warn("[Cracks TTD] no queue_on_teleport — use AutoExec")
 	end
 end
 
@@ -73,36 +67,12 @@ queueSelf()
 
 local func = {}
 
-function func.dectetLobbyOrMainGame(MainGameFlag, lobbyFlag)
-	MainGameFlag = false
-	lobbyFlag = false
+function func.isLobby()
+	return Lobby and Lobby:IsA("BoolValue") and Lobby.Value == true
+end
 
-	if Lobby and Lobby:IsA("BoolValue") and Lobby.Value == true then
-		lobbyFlag = true
-	end
-	if MainGame and MainGame:IsA("BoolValue") and MainGame.Value == true then
-		MainGameFlag = true
-	end
-
-	if not MainGameFlag and not lobbyFlag then
-		local pg = LocalPlayer:FindFirstChild("PlayerGui")
-		if pg then
-			if pg:FindFirstChild("Lobby") then
-				lobbyFlag = true
-			end
-			if pg:FindFirstChild("Match") then
-				MainGameFlag = true
-			end
-		end
-	end
-
-	if not MainGameFlag and not lobbyFlag then
-		if Workspace:FindFirstChild("Lifts") and Workspace.Lifts:FindFirstChild("ToiletHQ") then
-			lobbyFlag = true
-		end
-	end
-
-	return MainGameFlag, lobbyFlag
+function func.isGame()
+	return MainGame and MainGame:IsA("BoolValue") and MainGame.Value == true
 end
 
 function func.TeleportToFarmLocation()
@@ -194,16 +164,14 @@ end
 
 task.spawn(function()
 	while running do
-		local isMain, isLobby = func.dectetLobbyOrMainGame()
-
 		if autofarm then
-			if isLobby then
+			if func.isLobby() then
 				clickedSkipThisMatch = false
 				func.TeleportToFarmLocation()
 				task.wait(0.6)
 				func.ClickStartButton()
 				task.wait(2)
-			elseif isMain then
+			elseif func.isGame() then
 				if not clickedSkipThisMatch then
 					task.wait(1)
 					func.clickAutoFarmButtonOnce()
