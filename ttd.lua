@@ -188,6 +188,38 @@ task.spawn(function()
 end)
 
 task.spawn(function()
+	local lastLobby = nil
+	local lastGame = nil
+	local lastChange = tick()
+
+	while running do
+		local curLobby = Lobby and Lobby:IsA("BoolValue") and Lobby.Value or false
+		local curGame = MainGame and MainGame:IsA("BoolValue") and MainGame.Value or false
+
+		if lastLobby == nil then
+			lastLobby = curLobby
+			lastGame = curGame
+			lastChange = tick()
+		elseif curLobby ~= lastLobby or curGame ~= lastGame then
+			lastLobby = curLobby
+			lastGame = curGame
+			lastChange = tick()
+		elseif autofarm and (tick() - lastChange) >= 10 then
+			print(
+				"[Cracks TTD] safety: IsLobby/IsMainGame did not change for 10s",
+				"Lobby=",
+				curLobby,
+				"MainGame=",
+				curGame
+			)
+			lastChange = tick()
+		end
+
+		task.wait(0.5)
+	end
+end)
+
+task.spawn(function()
 	while running do
 		task.wait(25)
 		if AntiAfk then
