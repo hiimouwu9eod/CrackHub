@@ -204,40 +204,108 @@ function func.ClickStartButton()
 			fired = true
 		end
 	end)
+	pcall(function()
+		Start:Activate()
+		fired = true
+	end)
 	print("[Cracks TTD] ClickStart fired =", fired)
 end
 
 function func.clickAutoFarmButtonOnce()
 	func.refreshRefs()
-	if not AutoSkipButton then
+
+	local btn
+	pcall(function()
+		btn = PlayerGui.Match.TopFrame.AutoSkip.OnAndOff
+	end)
+
+	if btn and not (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) then
+		pcall(function()
+			for _, d in ipairs(PlayerGui.Match.TopFrame.AutoSkip:GetDescendants()) do
+				if d:IsA("GuiButton") or d:IsA("TextButton") or d:IsA("ImageButton") then
+					btn = d
+					break
+				end
+			end
+		end)
+	end
+
+	if not btn then
 		print("[Cracks TTD] AutoSkip button not found")
+		pcall(function()
+			print("[Cracks TTD] AutoSkip children:")
+			for _, d in ipairs(PlayerGui.Match.TopFrame.AutoSkip:GetDescendants()) do
+				print(" ", d.ClassName, d.Name, d:GetFullName())
+			end
+		end)
 		return
 	end
 
+	print("[Cracks TTD] AutoSkip target =", btn.ClassName, btn:GetFullName())
+
 	local fired = false
+
 	pcall(function()
-		if getconnections then
-			for _, c in ipairs(getconnections(AutoSkipButton.MouseButton1Click)) do
-				pcall(function()
-					c:Fire()
-					fired = true
-				end)
-			end
-			for _, c in ipairs(getconnections(AutoSkipButton.Activated)) do
-				pcall(function()
-					c:Fire()
-					fired = true
-				end)
+		if not getconnections then
+			return
+		end
+		for _, sigName in ipairs({
+			"Activated",
+			"MouseButton1Click",
+			"MouseButton1Down",
+			"MouseButton1Up",
+			"InputBegan",
+			"InputEnded",
+		}) do
+			local sig = btn[sigName]
+			if sig then
+				for _, c in ipairs(getconnections(sig)) do
+					pcall(function()
+						if c.Function then
+							c.Function()
+						end
+						c:Fire()
+						fired = true
+					end)
+				end
 			end
 		end
 	end)
+
 	pcall(function()
-		if firesignal then
-			firesignal(AutoSkipButton.MouseButton1Click)
-			firesignal(AutoSkipButton.Activated)
+		if not firesignal then
+			return
+		end
+		firesignal(btn.Activated)
+		firesignal(btn.MouseButton1Click)
+		firesignal(btn.MouseButton1Down)
+		fired = true
+	end)
+
+	pcall(function()
+		btn:Activate()
+		fired = true
+	end)
+
+	pcall(function()
+		if btn:IsA("GuiButton") then
+			btn.Selected = not btn.Selected
 			fired = true
 		end
 	end)
+
+	pcall(function()
+		local vim = game:GetService("VirtualInputManager")
+		local abs = btn.AbsolutePosition
+		local size = btn.AbsoluteSize
+		local x = abs.X + size.X / 2
+		local y = abs.Y + size.Y / 2
+		vim:SendMouseButtonEvent(x, y, 0, true, game, 0)
+		task.wait()
+		vim:SendMouseButtonEvent(x, y, 0, false, game, 0)
+		fired = true
+	end)
+
 	print("[Cracks TTD] AutoSkip fired =", fired)
 end
 
@@ -256,7 +324,7 @@ task.spawn(function()
 				task.wait(2)
 			elseif game_ then
 				if not clickedSkipThisMatch then
-					task.wait(1)
+					task.wait(1.5)
 					func.clickAutoFarmButtonOnce()
 					clickedSkipThisMatch = true
 				end
