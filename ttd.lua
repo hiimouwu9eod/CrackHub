@@ -10,7 +10,7 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local FarmLocation
 pcall(function()
-	FarmLocation = Workspace.Lifts.ToiletHQ.Base
+	FarmLocation = Workspace.Lifts.Desert.Base
 end)
 
 local LobbyGui, QueueFrame, Start
@@ -141,7 +141,22 @@ function func.isGame()
 	pcall(function()
 		v = rp.IsMainGame.Value == true
 	end)
+	if not v then
+		pcall(function()
+			if PlayerGui.Match then
+				v = true
+			end
+		end)
+	end
 	return v
+end
+
+function func.hasMatchUi()
+	local ok = false
+	pcall(function()
+		ok = PlayerGui.Match ~= nil
+	end)
+	return ok
 end
 
 function func.TeleportToFarmLocation()
@@ -312,25 +327,34 @@ end
 task.spawn(function()
 	while running do
 		if autofarm then
+			func.refreshRefs()
+
 			local lobby = func.isLobby()
 			local game_ = func.isGame()
-			print("[Cracks TTD] loop Lobby=", lobby, "Game=", game_)
+			local matchUi = func.hasMatchUi()
 
-			if lobby then
+			print("[Cracks TTD] loop Lobby=", lobby, "Game=", game_, "MatchUi=", matchUi)
+
+			if game_ or matchUi then
+				if not clickedSkipThisMatch then
+					task.wait(2)
+					print("[Cracks TTD] auto: clicking AutoSkip")
+					func.clickAutoFarmButtonOnce()
+					task.wait(0.5)
+					func.clickAutoFarmButtonOnce()
+					clickedSkipThisMatch = true
+					print("[Cracks TTD] auto: AutoSkip done")
+				end
+				task.wait(1)
+			elseif lobby then
 				clickedSkipThisMatch = false
+				print("[Cracks TTD] auto: lobby TP + Start")
 				func.TeleportToFarmLocation()
 				task.wait(0.6)
 				func.ClickStartButton()
 				task.wait(2)
-			elseif game_ then
-				if not clickedSkipThisMatch then
-					task.wait(1.5)
-					func.clickAutoFarmButtonOnce()
-					clickedSkipThisMatch = true
-				end
-				task.wait(1)
 			else
-				print("[Cracks TTD] waiting (both false)")
+				print("[Cracks TTD] waiting (not lobby/game)")
 				task.wait(1)
 			end
 		else
