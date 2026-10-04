@@ -10,7 +10,7 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local FarmLocation
 pcall(function()
-	FarmLocation = Workspace.Lifts.Desert.Base
+	FarmLocation = Workspace.Lifts.ToiletHQ.Base
 end)
 
 local LobbyGui, QueueFrame, Start
