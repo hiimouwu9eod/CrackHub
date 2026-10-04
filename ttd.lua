@@ -6,40 +6,56 @@ local rp = game:GetService("ReplicatedStorage")
 local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
-local FarmLocation = nil
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local FarmLocation
 pcall(function()
 	FarmLocation = Workspace.Lifts.ToiletHQ.Base
 end)
+
+local LobbyGui, QueueFrame, Start
+pcall(function()
+	LobbyGui = PlayerGui.Lobby
+end)
+pcall(function()
+	QueueFrame = LobbyGui.QueueFrame
+end)
+pcall(function()
+	Start = QueueFrame.Start
+end)
+
+local MatchGui, TopFrame, AutoSkipFrame, AutoSkipButton
+pcall(function()
+	MatchGui = PlayerGui.Match
+end)
+pcall(function()
+	TopFrame = MatchGui.TopFrame
+end)
+pcall(function()
+	AutoSkipFrame = TopFrame.AutoSkip
+end)
+pcall(function()
+	AutoSkipButton = AutoSkipFrame.OnAndOff
+end)
+
+local Lobby, MainGame
+pcall(function()
+	Lobby = rp.IsLobby
+end)
+pcall(function()
+	MainGame = rp.IsMainGame
+end)
+
 print("[Cracks TTD] FarmLocation =", FarmLocation)
-
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local LobbyGui = PlayerGui:FindFirstChild("Lobby")
-local QueueFrame = LobbyGui and LobbyGui:FindFirstChild("QueueFrame", true)
-local Start = QueueFrame and QueueFrame:FindFirstChild("Start", true)
-
-local MatchGui = PlayerGui:FindFirstChild("Match")
-local TopFrame = MatchGui and MatchGui:FindFirstChild("TopFrame", true)
-local AutoSkipFrame = TopFrame and TopFrame:FindFirstChild("AutoSkip", true)
-local AutoSkipButton = AutoSkipFrame and AutoSkipFrame:FindFirstChild("OnAndOff", true)
-
 print("[Cracks TTD] LobbyGui =", LobbyGui, "Start =", Start)
-print("[Cracks TTD] MatchGui =", MatchGui, "AutoSkipButton =", AutoSkipButton)
+print("[Cracks TTD] MatchGui =", MatchGui, "AutoSkip =", AutoSkipButton)
+print("[Cracks TTD] IsLobby =", Lobby, Lobby and Lobby.Value)
+print("[Cracks TTD] IsMainGame =", MainGame, MainGame and MainGame.Value)
 
 local AntiAfk = false
 local autofarm = getgenv().CracksTTD_AutoFarm == true
 local running = true
 local clickedSkipThisMatch = false
-
-local Lobby = rp:FindFirstChild("IsLobby", true)
-local MainGame = rp:FindFirstChild("IsMainGame", true)
-
-print("[Cracks TTD] IsLobby =", Lobby, Lobby and Lobby.Value)
-print("[Cracks TTD] IsMainGame =", MainGame, MainGame and MainGame.Value)
-
-if not Lobby and not MainGame then
-	print("[Cracks TTD] wrong game (no IsLobby/IsMainGame found)")
-	-- still load UI so you can press buttons manually
-end
 
 local SCRIPT_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/ttd.lua"
 
@@ -79,128 +95,150 @@ pcall(queueSelf)
 
 local func = {}
 
+function func.refreshRefs()
+	pcall(function()
+		FarmLocation = Workspace.Lifts.ToiletHQ.Base
+	end)
+	pcall(function()
+		LobbyGui = PlayerGui.Lobby
+	end)
+	pcall(function()
+		QueueFrame = LobbyGui.QueueFrame
+	end)
+	pcall(function()
+		Start = QueueFrame.Start
+	end)
+	pcall(function()
+		MatchGui = PlayerGui.Match
+	end)
+	pcall(function()
+		TopFrame = MatchGui.TopFrame
+	end)
+	pcall(function()
+		AutoSkipFrame = TopFrame.AutoSkip
+	end)
+	pcall(function()
+		AutoSkipButton = AutoSkipFrame.OnAndOff
+	end)
+	pcall(function()
+		Lobby = rp.IsLobby
+	end)
+	pcall(function()
+		MainGame = rp.IsMainGame
+	end)
+end
+
 function func.isLobby()
-	if Lobby and Lobby:IsA("BoolValue") then
-		return Lobby.Value == true
-	end
-	return false
+	local v = false
+	pcall(function()
+		v = rp.IsLobby.Value == true
+	end)
+	return v
 end
 
 function func.isGame()
-	if MainGame and MainGame:IsA("BoolValue") then
-		return MainGame.Value == true
-	end
-	return false
+	local v = false
+	pcall(function()
+		v = rp.IsMainGame.Value == true
+	end)
+	return v
 end
 
 function func.TeleportToFarmLocation()
-	if not FarmLocation then
-		pcall(function()
-			FarmLocation = Workspace.Lifts.ToiletHQ.Base
-		end)
-	end
+	func.refreshRefs()
 
-	local char = LocalPlayer.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local root
+	pcall(function()
+		root = LocalPlayer.Character.HumanoidRootPart
+	end)
 	if not root then
 		print("[Cracks TTD] TP fail: no root")
 		return
 	end
-	if not FarmLocation then
+
+	local part = FarmLocation
+	pcall(function()
+		if FarmLocation:IsA("Model") then
+			part = FarmLocation.PrimaryPart
+		end
+	end)
+	if not part then
 		print("[Cracks TTD] TP fail: no FarmLocation")
 		return
 	end
 
-	local part = FarmLocation
-	if part:IsA("Model") then
-		part = part.PrimaryPart or part:FindFirstChildWhichIsA("BasePart", true)
-	end
-	if not part then
-		print("[Cracks TTD] TP fail: no part")
-		return
-	end
-
-	root.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+	pcall(function()
+		root.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+	end)
 	print("[Cracks TTD] teleported to ToiletHQ")
 end
 
 function func.ClickStartButton()
-	if not Start or not Start.Parent then
-		LobbyGui = PlayerGui:FindFirstChild("Lobby")
-		QueueFrame = LobbyGui and LobbyGui:FindFirstChild("QueueFrame", true)
-		Start = QueueFrame and QueueFrame:FindFirstChild("Start", true)
-	end
+	func.refreshRefs()
 	if not Start then
 		print("[Cracks TTD] Start button not found")
 		return
 	end
 
 	local fired = false
-	if getconnections then
-		for _, c in ipairs(getconnections(Start.MouseButton1Click)) do
-			pcall(function()
-				c:Fire()
-				fired = true
-			end)
+	pcall(function()
+		if getconnections then
+			for _, c in ipairs(getconnections(Start.MouseButton1Click)) do
+				pcall(function()
+					c:Fire()
+					fired = true
+				end)
+			end
+			for _, c in ipairs(getconnections(Start.Activated)) do
+				pcall(function()
+					c:Fire()
+					fired = true
+				end)
+			end
 		end
-		for _, c in ipairs(getconnections(Start.Activated)) do
-			pcall(function()
-				c:Fire()
-				fired = true
-			end)
-		end
-	end
-	if firesignal then
-		pcall(function()
+	end)
+	pcall(function()
+		if firesignal then
 			firesignal(Start.MouseButton1Click)
-			fired = true
-		end)
-		pcall(function()
 			firesignal(Start.Activated)
 			fired = true
-		end)
-	end
-	print("[Cracks TTD] ClickStart fired =", fired, "btn =", Start:GetFullName())
+		end
+	end)
+	print("[Cracks TTD] ClickStart fired =", fired)
 end
 
 function func.clickAutoFarmButtonOnce()
-	if not AutoSkipButton or not AutoSkipButton.Parent then
-		MatchGui = PlayerGui:FindFirstChild("Match")
-		TopFrame = MatchGui and MatchGui:FindFirstChild("TopFrame", true)
-		AutoSkipFrame = TopFrame and TopFrame:FindFirstChild("AutoSkip", true)
-		AutoSkipButton = AutoSkipFrame and AutoSkipFrame:FindFirstChild("OnAndOff", true)
-	end
+	func.refreshRefs()
 	if not AutoSkipButton then
 		print("[Cracks TTD] AutoSkip button not found")
 		return
 	end
 
 	local fired = false
-	if getconnections then
-		for _, c in ipairs(getconnections(AutoSkipButton.MouseButton1Click)) do
-			pcall(function()
-				c:Fire()
-				fired = true
-			end)
+	pcall(function()
+		if getconnections then
+			for _, c in ipairs(getconnections(AutoSkipButton.MouseButton1Click)) do
+				pcall(function()
+					c:Fire()
+					fired = true
+				end)
+			end
+			for _, c in ipairs(getconnections(AutoSkipButton.Activated)) do
+				pcall(function()
+					c:Fire()
+					fired = true
+				end)
+			end
 		end
-		for _, c in ipairs(getconnections(AutoSkipButton.Activated)) do
-			pcall(function()
-				c:Fire()
-				fired = true
-			end)
-		end
-	end
-	if firesignal then
-		pcall(function()
+	end)
+	pcall(function()
+		if firesignal then
 			firesignal(AutoSkipButton.MouseButton1Click)
-			fired = true
-		end)
-		pcall(function()
 			firesignal(AutoSkipButton.Activated)
 			fired = true
-		end)
-	end
-	print("[Cracks TTD] AutoSkip fired =", fired, "btn =", AutoSkipButton:GetFullName())
+		end
+	end)
+	print("[Cracks TTD] AutoSkip fired =", fired)
 end
 
 task.spawn(function()
@@ -239,8 +277,8 @@ task.spawn(function()
 	local lastChange = tick()
 
 	while running do
-		local curLobby = Lobby and Lobby:IsA("BoolValue") and Lobby.Value or false
-		local curGame = MainGame and MainGame:IsA("BoolValue") and MainGame.Value or false
+		local curLobby = func.isLobby()
+		local curGame = func.isGame()
 
 		if lastLobby == nil then
 			lastLobby = curLobby
@@ -281,7 +319,6 @@ LocalPlayer.Idled:Connect(function()
 end)
 
 local libSrc
-local libErr
 local libOk, libRes = pcall(function()
 	return game:HttpGet(
 		"https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/lib.lua",
@@ -291,21 +328,14 @@ end)
 if libOk then
 	libSrc = libRes
 else
-	libErr = libRes
-	print("[Cracks TTD] lib HttpGet failed:", libErr)
+	print("[Cracks TTD] lib HttpGet failed:", libRes)
 end
 
-if type(libSrc) ~= "string" then
-	print("[Cracks TTD] no UI (lib missing) — farm loop still runs if AutoFarm was saved on")
-else
+if type(libSrc) == "string" then
 	local chunkOk, chunk = pcall(loadstring, libSrc)
-	if not chunkOk or type(chunk) ~= "function" then
-		print("[Cracks TTD] lib compile failed")
-	else
+	if chunkOk and type(chunk) == "function" then
 		local runOk, Lib = pcall(chunk)
-		if not runOk or type(Lib) ~= "table" or type(Lib.Init) ~= "function" then
-			print("[Cracks TTD] lib Init failed:", Lib)
-		else
+		if runOk and type(Lib) == "table" and type(Lib.Init) == "function" then
 			local executor = "Unknown"
 			pcall(function()
 				if identifyexecutor then
@@ -313,13 +343,16 @@ else
 				end
 			end)
 
-			local GUI = Lib:Init(
-				"Cracks Hub | TTD | " .. executor,
-				true,
-				Enum.KeyCode.LeftControl,
-				"Default",
-				{ Enabled = false }
-			)
+			local GUI
+			pcall(function()
+				GUI = Lib:Init(
+					"Cracks Hub | TTD | " .. executor,
+					true,
+					Enum.KeyCode.LeftControl,
+					"Default",
+					{ Enabled = false }
+				)
+			end)
 
 			if GUI then
 				local function harden(sec)
@@ -376,11 +409,13 @@ else
 					end)
 				end)
 
-				print("[Cracks TTD] UI loaded — press LeftControl")
-			else
-				print("[Cracks TTD] GUI Init returned nil")
+				print("[Cracks TTD] UI loaded — LeftControl")
 			end
+		else
+			print("[Cracks TTD] lib run failed")
 		end
+	else
+		print("[Cracks TTD] lib compile failed")
 	end
 end
 
