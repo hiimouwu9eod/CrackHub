@@ -13,7 +13,7 @@ local LobbyGui = PlayerGui:FindFirstChild("Lobby")
 local QueueFrame = LobbyGui and LobbyGui:FindFirstChild("QueueFrame", true)
 local Start = QueueFrame and QueueFrame:FindFirstChild("Start", true)
 
-local MatchGui = PlayerGui:FindFirstChild("MatchGui")
+local MatchGui = PlayerGui:FindFirstChild("Match")
 local TopFrame = MatchGui and MatchGui:FindFirstChild("TopFrame", true)
 local AutoSkipFrame = TopFrame and TopFrame:FindFirstChild("AutoSkip", true)
 local AutoSkipButton = AutoSkipFrame and AutoSkipFrame:FindFirstChild("OnAndOff", true)
