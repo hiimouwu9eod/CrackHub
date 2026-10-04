@@ -23,17 +23,10 @@ local autofarm = getgenv().CracksTTD_AutoFarm == true
 local running = true
 local clickedSkipThisMatch = false
 
-local Lobby = rp:FindFirstChild("IsLobby")
-local MainGame = rp:FindFirstChild("IsMainGame")
+local Lobby = rp:FindFirstChild("IsLobby", true)
+local MainGame = rp:FindFirstChild("IsMainGame", true)
 
-if not ((Lobby and Lobby:IsA("BoolValue")) or (MainGame and MainGame:IsA("BoolValue"))) then
-	print("wrong game")
-	return
-end
-
-local isMain0 = MainGame and MainGame:IsA("BoolValue") and MainGame.Value == true
-local isLobby0 = Lobby and Lobby:IsA("BoolValue") and Lobby.Value == true
-if not isMain0 and not isLobby0 then
+if not Lobby and not MainGame then
 	print("wrong game")
 	return
 end
@@ -57,9 +50,26 @@ function func.dectetLobbyOrMainGame(MainGameFlag, lobbyFlag)
 	if Lobby and Lobby:IsA("BoolValue") and Lobby.Value == true then
 		lobbyFlag = true
 	end
-
 	if MainGame and MainGame:IsA("BoolValue") and MainGame.Value == true then
 		MainGameFlag = true
+	end
+
+	if not MainGameFlag and not lobbyFlag then
+		local pg = LocalPlayer:FindFirstChild("PlayerGui")
+		if pg then
+			if pg:FindFirstChild("Lobby") then
+				lobbyFlag = true
+			end
+			if pg:FindFirstChild("Match") then
+				MainGameFlag = true
+			end
+		end
+	end
+
+	if not MainGameFlag and not lobbyFlag then
+		if Workspace:FindFirstChild("Lifts") and Workspace.Lifts:FindFirstChild("ToiletHQ") then
+			lobbyFlag = true
+		end
 	end
 
 	return MainGameFlag, lobbyFlag
@@ -76,7 +86,6 @@ function func.TeleportToFarmLocation()
 	if not root or not FarmLocation then
 		return
 	end
-
 	local part = FarmLocation
 	if part:IsA("Model") then
 		part = part.PrimaryPart or part:FindFirstChildWhichIsA("BasePart", true)
@@ -84,7 +93,6 @@ function func.TeleportToFarmLocation()
 	if not part then
 		return
 	end
-
 	root.CFrame = part.CFrame + Vector3.new(0, 3, 0)
 end
 
@@ -97,7 +105,6 @@ function func.ClickStartButton()
 	if not Start then
 		return
 	end
-
 	if getconnections then
 		for _, c in ipairs(getconnections(Start.MouseButton1Click)) do
 			pcall(function()
@@ -121,7 +128,7 @@ end
 
 function func.clickAutoFarmButtonOnce()
 	if not AutoSkipButton or not AutoSkipButton.Parent then
-		MatchGui = PlayerGui:FindFirstChild("MatchGui")
+		MatchGui = PlayerGui:FindFirstChild("Match")
 		TopFrame = MatchGui and MatchGui:FindFirstChild("TopFrame", true)
 		AutoSkipFrame = TopFrame and TopFrame:FindFirstChild("AutoSkip", true)
 		AutoSkipButton = AutoSkipFrame and AutoSkipFrame:FindFirstChild("OnAndOff", true)
@@ -129,7 +136,6 @@ function func.clickAutoFarmButtonOnce()
 	if not AutoSkipButton then
 		return
 	end
-
 	if getconnections then
 		for _, c in ipairs(getconnections(AutoSkipButton.MouseButton1Click)) do
 			pcall(function()
@@ -155,10 +161,7 @@ task.spawn(function()
 	while running do
 		local isMain, isLobby = func.dectetLobbyOrMainGame()
 
-		if not isMain and not isLobby then
-			print("wrong game")
-			task.wait(2)
-		elseif autofarm then
+		if autofarm then
 			if isLobby then
 				clickedSkipThisMatch = false
 				func.TeleportToFarmLocation()
@@ -171,6 +174,8 @@ task.spawn(function()
 					func.clickAutoFarmButtonOnce()
 					clickedSkipThisMatch = true
 				end
+				task.wait(1)
+			else
 				task.wait(1)
 			end
 		else
@@ -207,7 +212,6 @@ pcall(function()
 		true
 	)
 end)
-
 if type(libSrc) ~= "string" then
 	return
 end
