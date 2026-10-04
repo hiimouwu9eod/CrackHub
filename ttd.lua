@@ -1,12 +1,12 @@
 local Workspace = game:GetService("Workspace")
-local FarmLocation = Workspace:FindFirstChild("Lifts")
-	and Workspace.Lifts:FindFirstChild("ToiletHQ")
-	and Workspace.Lifts.ToiletHQ:FindFirstChild("Base")
-
 local Players = game:GetService("Players")
 local rp = game:GetService("ReplicatedStorage")
 local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
+
+local FarmLocation = Workspace:FindFirstChild("Lifts")
+	and Workspace.Lifts:FindFirstChild("ToiletHQ")
+	and Workspace.Lifts.ToiletHQ:FindFirstChild("Base")
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local LobbyGui = PlayerGui:FindFirstChild("Lobby")
@@ -33,13 +33,43 @@ end
 
 local SCRIPT_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/ttd.lua"
 
-local queueTP = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
-if queueTP then
-	queueTP(([[
+local function queueSelf()
+	local code = string.format([[
 		getgenv().CracksTTD_AutoFarm = %s
-		loadstring(game:HttpGet("%s", true))()
-	]]):format(tostring(autofarm), SCRIPT_URL))
+		local ok, err = pcall(function()
+			loadstring(game:HttpGet("%s", true))()
+		end)
+		if not ok then
+			warn("[Cracks TTD] queue load failed:", err)
+		end
+	]], tostring(getgenv().CracksTTD_AutoFarm == true), SCRIPT_URL)
+
+	local queued = false
+	local fns = {
+		queue_on_teleport,
+		syn and syn.queue_on_teleport,
+		fluxus and fluxus.queue_on_teleport,
+		queueonteleport,
+		getgenv().queue_on_teleport,
+	}
+
+	for _, fn in ipairs(fns) do
+		if typeof(fn) == "function" then
+			local ok = pcall(fn, code)
+			if ok then
+				queued = true
+			end
+		end
+	end
+
+	if not queued then
+		warn("[Cracks TTD] no queue_on_teleport — put script in AutoExec")
+	else
+		print("[Cracks TTD] queued for next teleport")
+	end
 end
+
+queueSelf()
 
 local func = {}
 
@@ -81,11 +111,13 @@ function func.TeleportToFarmLocation()
 			and Workspace.Lifts:FindFirstChild("ToiletHQ")
 			and Workspace.Lifts.ToiletHQ:FindFirstChild("Base")
 	end
+
 	local char = LocalPlayer.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	if not root or not FarmLocation then
 		return
 	end
+
 	local part = FarmLocation
 	if part:IsA("Model") then
 		part = part.PrimaryPart or part:FindFirstChildWhichIsA("BasePart", true)
@@ -93,6 +125,7 @@ function func.TeleportToFarmLocation()
 	if not part then
 		return
 	end
+
 	root.CFrame = part.CFrame + Vector3.new(0, 3, 0)
 end
 
@@ -105,6 +138,7 @@ function func.ClickStartButton()
 	if not Start then
 		return
 	end
+
 	if getconnections then
 		for _, c in ipairs(getconnections(Start.MouseButton1Click)) do
 			pcall(function()
@@ -136,6 +170,7 @@ function func.clickAutoFarmButtonOnce()
 	if not AutoSkipButton then
 		return
 	end
+
 	if getconnections then
 		for _, c in ipairs(getconnections(AutoSkipButton.MouseButton1Click)) do
 			pcall(function()
@@ -259,6 +294,7 @@ FarmSec:ConfigToggle("Auto Farm", autofarm, function(v)
 	autofarm = v
 	getgenv().CracksTTD_AutoFarm = v
 	clickedSkipThisMatch = false
+	queueSelf()
 end)
 
 FarmSec:Button("TP ToiletHQ", function()
@@ -290,3 +326,5 @@ MiscSec:Button("Unload", function()
 		end
 	end)
 end)
+
+print("[Cracks TTD] loaded")
