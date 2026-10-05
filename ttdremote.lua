@@ -52,4 +52,4 @@ task.spawn(function()
 	print("[TTD Remote] all places done")
 end)
 
-print("[TTD Remote] loaded money=", getMoney())
+print("[TTD Remote] on load money=", getMoney())
