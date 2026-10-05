@@ -7,57 +7,83 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local TTD_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/ttd.lua"
 local REMOTE_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/ttdremote.lua"
 
-local function isGame()
-	local v = false
+if not game:IsLoaded() then
 	pcall(function()
-		v = rp.IsMainGame.Value == true
+		game.Loaded:Wait()
 	end)
-	return v
+end
+
+-- wait until at least one flag exists / settles
+local function waitFlags(timeout)
+	local t0 = tick()
+	while tick() - t0 < (timeout or 8) do
+		local lobby, main
+		pcall(function()
+			lobby = rp.IsLobby.Value
+		end)
+		pcall(function()
+			main = rp.IsMainGame.Value
+		end)
+		if lobby ~= nil or main ~= nil then
+			if lobby == true or main == true then
+				return
+			end
+		end
+		task.wait(0.2)
+	end
+end
+
+waitFlags(8)
+
+local function isGame()
+	local ok, val = pcall(function()
+		return rp.IsMainGame.Value
+	end)
+	if ok then
+		return val
+	end
+	return false
 end
 
 local function isLobby()
-	local v = false
-	pcall(function()
-		v = rp.IsLobby.Value == true
+	local ok, val = pcall(function()
+		return rp.IsLobby.Value
 	end)
-	return v
+	if ok then
+		return val
+	end
+	return false
 end
 
+print("[Cracks TTD] on load IsLobby=", isLobby(), "IsMainGame=", isGame())
+
+-- IN GAME → remote only, then stop this file
 if isGame() then
-	print("[Cracks TTD] in game → ttdremote.lua")
+	print("[Cracks TTD] GAME → execute ttdremote.lua now")
 	local src
-	pcall(function()
-		src = game:HttpGet(REMOTE_URL, true)
+	local okGet, res = pcall(function()
+		return game:HttpGet(REMOTE_URL, true)
 	end)
-	if type(src) == "string" then
-		local ok, err = pcall(function()
-			loadstring(src)()
+	if okGet then
+		src = res
+	end
+	if type(src) == "string" and #src > 0 then
+		local okRun, err = pcall(function()
+			assert(loadstring(src))()
 		end)
-		if not ok then
-			warn("[Cracks TTD] ttdremote failed:", err)
+		if not okRun then
+			warn("[Cracks TTD] ttdremote error:", err)
+		else
+			print("[Cracks TTD] ttdremote executed")
 		end
 	else
-		warn("[Cracks TTD] download ttdremote failed")
+		warn("[Cracks TTD] ttdremote download failed")
 	end
 	return
 end
 
-print("[Cracks TTD] lobby → farm UI")
-
-local FarmMap = {
-	ToiletCity = {
-		Mode = "Easy",
-		TpLocation = workspace.Lifts.ToiletCity.Base,
-	},
-}
-
-local GUIS = {
-	StartGui = nil,
-}
-
-pcall(function()
-	GUIS.StartGui = PlayerGui.Lobby.QueueFrame.QueueFrame
-end)
+-- LOBBY → farm UI
+print("[Cracks TTD] LOBBY → farm UI")
 
 local AntiAfk = false
 local autofarm = getgenv().CracksTTD_AutoFarm == true
@@ -68,12 +94,9 @@ local function queueSelf()
 	local code = string.format([[
 		getgenv().CracksTTD_AutoFarm = %s
 		task.spawn(function()
-			local ok, err = pcall(function()
+			pcall(function()
 				loadstring(game:HttpGet("%s", true))()
 			end)
-			if not ok then
-				warn("[Cracks TTD] re-exec failed:", err)
-			end
 		end)
 	]], tostring(getgenv().CracksTTD_AutoFarm == true), TTD_URL)
 
@@ -91,12 +114,7 @@ local function queueSelf()
 			end
 		end
 	end
-
-	if queued then
-		print("[Cracks TTD] execute-on-tp queued")
-	else
-		warn("[Cracks TTD] no queue_on_teleport — use AutoExec")
-	end
+	print(queued and "[Cracks TTD] queued on tp" or "[Cracks TTD] no queue — use AutoExec")
 end
 
 queueSelf()
@@ -112,7 +130,7 @@ end)
 local func = {}
 
 function func.TeleportToFarmLocation()
-	local part
+	local part, root
 	pcall(function()
 		part = workspace.Lifts.ToiletCity.Base
 	end)
@@ -121,17 +139,13 @@ function func.TeleportToFarmLocation()
 			part = part.PrimaryPart or part:FindFirstChildWhichIsA("BasePart", true)
 		end
 	end)
-
-	local root
 	pcall(function()
 		root = LocalPlayer.Character.HumanoidRootPart
 	end)
-
 	if not root or not part then
 		print("[Cracks TTD] TP fail")
 		return
 	end
-
 	pcall(function()
 		root.CFrame = part.CFrame + Vector3.new(0, 3, 0)
 	end)
@@ -152,14 +166,13 @@ function func.ClickStartButton()
 		print("[Cracks TTD] Start not found")
 		return
 	end
-
 	if not (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) then
 		pcall(function()
 			for _, d in ipairs(btn:GetDescendants()) do
 				if d:IsA("GuiButton") or d:IsA("TextButton") or d:IsA("ImageButton") then
-					local name = string.lower(d.Name)
-					local text = string.lower(tostring(d.Text or ""))
-					if name:find("start") or text:find("start") then
+					local n = string.lower(d.Name)
+					local t = string.lower(tostring(d.Text or ""))
+					if n:find("start") or t:find("start") then
 						btn = d
 						break
 					end
@@ -167,9 +180,6 @@ function func.ClickStartButton()
 			end
 		end)
 	end
-
-	GUIS.StartGui = btn
-
 	pcall(function()
 		if getconnections then
 			for _, n in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down" }) do
@@ -213,7 +223,6 @@ function func.AutoSkipRemote(callamt)
 		Event = rp.NetworkingContainer.DataRemote
 	end)
 	if not Event then
-		print("[Cracks TTD] DataRemote missing")
 		return
 	end
 	for _ = 1, callamt do
@@ -226,21 +235,13 @@ function func.AutoSkipRemote(callamt)
 		end)
 		task.wait(0.1)
 	end
-	print("[Cracks TTD] AutoSkip remote x" .. tostring(callamt))
-end
-
-function func.IsLobby()
-	return isLobby()
-end
-
-function func.IsGame()
-	return isGame()
+	print("[Cracks TTD] AutoSkip x" .. tostring(callamt))
 end
 
 task.spawn(function()
 	while running do
 		if autofarm then
-			if func.IsGame() then
+			if isGame() then
 				if not clickedSkip then
 					task.wait(1)
 					func.AutoSkipRemote(1)
@@ -253,7 +254,7 @@ task.spawn(function()
 					end)
 				end
 				task.wait(1)
-			elseif func.IsLobby() then
+			elseif isLobby() then
 				clickedSkip = false
 				getgenv().CracksTTD_RemoteLoaded = false
 				func.TeleportAndStart()
@@ -290,90 +291,71 @@ end)
 
 local libSrc
 pcall(function()
-	libSrc = game:HttpGet(
-		"https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/lib.lua",
-		true
-	)
+	libSrc = game:HttpGet("https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/lib.lua", true)
 end)
 
 if type(libSrc) == "string" then
 	local ok, Lib = pcall(function()
 		return loadstring(libSrc)()
 	end)
-	if ok and type(Lib) == "table" and type(Lib.Init) == "function" then
+	if ok and type(Lib) == "table" and Lib.Init then
 		local executor = "Unknown"
 		pcall(function()
-			if identifyexecutor then
-				executor = identifyexecutor()
-			end
+			executor = identifyexecutor()
 		end)
-
 		local GUI
 		pcall(function()
 			GUI = Lib:Init(
-				"Cracks Hub | TTD | " .. executor,
+				"Cracks Hub | TTD | " .. tostring(executor),
 				true,
 				Enum.KeyCode.LeftControl,
 				"Default",
 				{ Enabled = false }
 			)
 		end)
-
 		if GUI then
 			local function harden(sec)
-				if type(sec) ~= "table" then
-					return sec
-				end
-				if type(sec.ConfigToggle) ~= "function" and type(sec.Toggle) == "function" then
+				if type(sec) == "table" and type(sec.ConfigToggle) ~= "function" and type(sec.Toggle) == "function" then
 					function sec:ConfigToggle(a, b, c)
 						return self:Toggle(a, b, c)
 					end
 				end
 				return sec
 			end
+			local tab = GUI:CreateTab("Main")
+			local farm = harden(tab:Section("Farm"))
+			local misc = harden(tab:Section("Misc"))
 
-			local MainTab = GUI:CreateTab("Main")
-			local FarmSec = harden(MainTab:Section("Farm"))
-			local MiscSec = harden(MainTab:Section("Misc"))
-
-			FarmSec:ConfigToggle("Auto Farm", autofarm, function(v)
+			farm:ConfigToggle("Auto Farm", autofarm, function(v)
 				autofarm = v
 				getgenv().CracksTTD_AutoFarm = v
 				clickedSkip = false
 				queueSelf()
 			end)
-
-			FarmSec:Button("TP + Start", function()
+			farm:Button("TP + Start", function()
 				func.TeleportAndStart()
 			end)
-
-			FarmSec:Button("TP ToiletCity", function()
+			farm:Button("TP ToiletCity", function()
 				func.TeleportToFarmLocation()
 			end)
-
-			FarmSec:Button("Click Start", function()
+			farm:Button("Click Start", function()
 				func.ClickStartButton()
 			end)
-
-			FarmSec:Button("AutoSkip Remote", function()
+			farm:Button("AutoSkip Remote", function()
 				func.AutoSkipRemote(1)
 			end)
-
-			FarmSec:Button("Load Place Remote", function()
+			farm:Button("Load Place Remote", function()
 				pcall(function()
 					loadstring(game:HttpGet(REMOTE_URL, true))()
 				end)
 			end)
-
-			MiscSec:ConfigToggle("Anti Afk", false, function(v)
+			misc:ConfigToggle("Anti Afk", false, function(v)
 				AntiAfk = v
 			end)
-
-			MiscSec:Button("Unload", function()
+			misc:Button("Unload", function()
 				running = false
 				autofarm = false
 				getgenv().CracksTTD_AutoFarm = false
-				AntiAfk = false
 				pcall(function()
 					if GUI.Unload then
 						GUI:Unload()
@@ -386,4 +368,4 @@ if type(libSrc) == "string" then
 	end
 end
 
-print("[Cracks TTD] lobby farm ready — LeftControl")
+print("[Cracks TTD] lobby UI ready — LeftControl")
