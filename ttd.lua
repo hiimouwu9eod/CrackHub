@@ -1,134 +1,207 @@
-print("[Cracks TTD] starting...")
-
-local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local rp = game:GetService("ReplicatedStorage")
 local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
-
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-local FarmLocation
-pcall(function()
-	FarmLocation = Workspace.Lifts.ToiletHQ.Base
-end)
+local FarmMap = {
+	ToiletCity = {
+		Mode = "Easy",
+		TpLocation = workspace.Lifts.ToiletCity.Base,
+	},
+}
 
-local LobbyGui, QueueFrame, Start
-pcall(function()
-	LobbyGui = PlayerGui.Lobby
-end)
-pcall(function()
-	QueueFrame = LobbyGui.QueueFrame
-end)
-pcall(function()
-	Start = QueueFrame.Start
-end)
+local CurrentFarm = "ToiletCity"
 
-local MatchGui, TopFrame, AutoSkipFrame, AutoSkipButton
-pcall(function()
-	MatchGui = PlayerGui.Match
-end)
-pcall(function()
-	TopFrame = MatchGui.TopFrame
-end)
-pcall(function()
-	AutoSkipFrame = TopFrame.AutoSkip
-end)
-pcall(function()
-	AutoSkipButton = AutoSkipFrame.OnAndOff
-end)
+local GUIS = {
+	StartGui = nil,
+}
 
-local Lobby, MainGame
 pcall(function()
-	Lobby = rp.IsLobby
+	GUIS.StartGui = PlayerGui.Lobby.QueueFrame.QueueFrame
 end)
-pcall(function()
-	MainGame = rp.IsMainGame
-end)
-
-print("[Cracks TTD] FarmLocation =", FarmLocation)
-print("[Cracks TTD] LobbyGui =", LobbyGui, "Start =", Start)
-print("[Cracks TTD] MatchGui =", MatchGui, "AutoSkip =", AutoSkipButton)
-print("[Cracks TTD] IsLobby =", Lobby, Lobby and Lobby.Value)
-print("[Cracks TTD] IsMainGame =", MainGame, MainGame and MainGame.Value)
 
 local AntiAfk = false
 local autofarm = getgenv().CracksTTD_AutoFarm == true
 local running = true
-local clickedSkipThisMatch = false
+local clickedSkip = false
 
 local SCRIPT_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/ttd.lua"
 
 local function queueSelf()
 	local code = string.format([[
 		getgenv().CracksTTD_AutoFarm = %s
-		pcall(function()
-			loadstring(game:HttpGet("%s", true))()
+		task.spawn(function()
+			local ok, err = pcall(function()
+				loadstring(game:HttpGet("%s", true))()
+			end)
+			if not ok then
+				warn("[Cracks TTD] re-exec failed:", err)
+			end
 		end)
 	]], tostring(getgenv().CracksTTD_AutoFarm == true), SCRIPT_URL)
 
-	local fns = {
+	local queued = false
+	for _, fn in ipairs({
 		queue_on_teleport,
 		syn and syn.queue_on_teleport,
 		fluxus and fluxus.queue_on_teleport,
 		queueonteleport,
 		getgenv().queue_on_teleport,
-	}
-
-	local queued = false
-	for _, fn in ipairs(fns) do
+	}) do
 		if typeof(fn) == "function" then
-			if pcall(fn, code) then
+			local ok = pcall(fn, code)
+			if ok then
 				queued = true
 			end
 		end
 	end
 
-	if not queued then
-		warn("[Cracks TTD] no queue_on_teleport — use AutoExec")
+	if queued then
+		print("[Cracks TTD] execute-on-tp queued")
 	else
-		print("[Cracks TTD] queued for teleport")
+		warn("[Cracks TTD] no queue_on_teleport — put script in AutoExec")
 	end
 end
 
-pcall(queueSelf)
+-- queue every time this place loads
+queueSelf()
+
+-- re-queue when leaving this place
+pcall(function()
+	LocalPlayer.OnTeleport:Connect(function(state)
+		if state == Enum.TeleportState.Started or state == Enum.TeleportState.RequestedFromServer then
+			queueSelf()
+		end
+	end)
+end)
 
 local func = {}
 
-function func.refreshRefs()
-	pcall(function()
-		FarmLocation = Workspace.Lifts.ToiletHQ.Base
-	end)
-	pcall(function()
-		LobbyGui = PlayerGui.Lobby
-	end)
-	pcall(function()
-		QueueFrame = LobbyGui.QueueFrame
-	end)
-	pcall(function()
-		Start = QueueFrame.Start
-	end)
-	pcall(function()
-		MatchGui = PlayerGui.Match
-	end)
-	pcall(function()
-		TopFrame = MatchGui.TopFrame
-	end)
-	pcall(function()
-		AutoSkipFrame = TopFrame.AutoSkip
-	end)
-	pcall(function()
-		AutoSkipButton = AutoSkipFrame.OnAndOff
-	end)
-	pcall(function()
-		Lobby = rp.IsLobby
-	end)
-	pcall(function()
-		MainGame = rp.IsMainGame
-	end)
+function func.GetFarm()
+	return FarmMap.ToiletCity
 end
 
-function func.isLobby()
+function func.TeleportToFarmLocation()
+	local part
+	pcall(function()
+		part = workspace.Lifts.ToiletCity.Base
+	end)
+	pcall(function()
+		if part and part:IsA("Model") then
+			part = part.PrimaryPart or part:FindFirstChildWhichIsA("BasePart", true)
+		end
+	end)
+
+	local root
+	pcall(function()
+		root = LocalPlayer.Character.HumanoidRootPart
+	end)
+
+	if not root or not part then
+		print("[Cracks TTD] TP fail")
+		return
+	end
+
+	pcall(function()
+		root.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+	end)
+	print("[Cracks TTD] TP ToiletCity")
+end
+
+function func.ClickStartButton()
+	local btn
+	pcall(function()
+		btn = PlayerGui.Lobby.QueueFrame.QueueFrame
+	end)
+	if not btn then
+		pcall(function()
+			btn = PlayerGui.Lobby.QueueFrame.Start
+		end)
+	end
+	if not btn then
+		print("[Cracks TTD] Start not found")
+		return
+	end
+
+	if not (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) then
+		pcall(function()
+			for _, d in ipairs(btn:GetDescendants()) do
+				if d:IsA("GuiButton") or d:IsA("TextButton") or d:IsA("ImageButton") then
+					local name = string.lower(d.Name)
+					local text = string.lower(tostring(d.Text or ""))
+					if name:find("start") or text:find("start") then
+						btn = d
+						break
+					end
+				end
+			end
+		end)
+	end
+
+	GUIS.StartGui = btn
+
+	pcall(function()
+		if getconnections then
+			for _, n in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down" }) do
+				local s = btn[n]
+				if s then
+					for _, c in ipairs(getconnections(s)) do
+						pcall(function()
+							if c.Function then
+								c.Function()
+							end
+							c:Fire()
+						end)
+					end
+				end
+			end
+		end
+	end)
+	pcall(function()
+		if firesignal then
+			firesignal(btn.Activated)
+			firesignal(btn.MouseButton1Click)
+		end
+	end)
+	pcall(function()
+		btn:Activate()
+	end)
+	print("[Cracks TTD] Start clicked")
+end
+
+function func.TeleportAndStart()
+	queueSelf()
+	func.TeleportToFarmLocation()
+	task.wait(0.7)
+	func.ClickStartButton()
+end
+
+function func.AutoSkipRemote(callamt)
+	callamt = tonumber(callamt) or 1
+	local Event
+	pcall(function()
+		Event = rp.NetworkingContainer.DataRemote
+	end)
+	if not Event then
+		print("[Cracks TTD] DataRemote missing")
+		return
+	end
+
+	for _ = 1, callamt do
+		pcall(function()
+			Event:FireServer({
+				{
+					"\xE2\x81\x82'",
+				},
+			})
+		end)
+		task.wait(0.1)
+	end
+	print("[Cracks TTD] AutoSkip remote x" .. tostring(callamt))
+end
+
+function func.IsLobby()
 	local v = false
 	pcall(function()
 		v = rp.IsLobby.Value == true
@@ -136,256 +209,34 @@ function func.isLobby()
 	return v
 end
 
-function func.isGame()
+function func.IsGame()
 	local v = false
 	pcall(function()
 		v = rp.IsMainGame.Value == true
 	end)
-	if not v then
-		pcall(function()
-			if PlayerGui.Match then
-				v = true
-			end
-		end)
-	end
 	return v
-end
-
-function func.hasMatchUi()
-	local ok = false
-	pcall(function()
-		ok = PlayerGui.Match ~= nil
-	end)
-	return ok
-end
-
-function func.TeleportToFarmLocation()
-	func.refreshRefs()
-
-	local root
-	pcall(function()
-		root = LocalPlayer.Character.HumanoidRootPart
-	end)
-	if not root then
-		print("[Cracks TTD] TP fail: no root")
-		return
-	end
-
-	local part = FarmLocation
-	pcall(function()
-		if FarmLocation:IsA("Model") then
-			part = FarmLocation.PrimaryPart
-		end
-	end)
-	if not part then
-		print("[Cracks TTD] TP fail: no FarmLocation")
-		return
-	end
-
-	pcall(function()
-		root.CFrame = part.CFrame + Vector3.new(0, 3, 0)
-	end)
-	print("[Cracks TTD] teleported to ToiletHQ")
-end
-
-function func.ClickStartButton()
-	func.refreshRefs()
-	if not Start then
-		print("[Cracks TTD] Start button not found")
-		return
-	end
-
-	local fired = false
-	pcall(function()
-		if getconnections then
-			for _, c in ipairs(getconnections(Start.MouseButton1Click)) do
-				pcall(function()
-					c:Fire()
-					fired = true
-				end)
-			end
-			for _, c in ipairs(getconnections(Start.Activated)) do
-				pcall(function()
-					c:Fire()
-					fired = true
-				end)
-			end
-		end
-	end)
-	pcall(function()
-		if firesignal then
-			firesignal(Start.MouseButton1Click)
-			firesignal(Start.Activated)
-			fired = true
-		end
-	end)
-	pcall(function()
-		Start:Activate()
-		fired = true
-	end)
-	print("[Cracks TTD] ClickStart fired =", fired)
-end
-
-function func.clickAutoFarmButtonOnce()
-	func.refreshRefs()
-
-	local btn
-	pcall(function()
-		btn = PlayerGui.Match.TopFrame.AutoSkip.OnAndOff
-	end)
-
-	if btn and not (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) then
-		pcall(function()
-			for _, d in ipairs(PlayerGui.Match.TopFrame.AutoSkip:GetDescendants()) do
-				if d:IsA("GuiButton") or d:IsA("TextButton") or d:IsA("ImageButton") then
-					btn = d
-					break
-				end
-			end
-		end)
-	end
-
-	if not btn then
-		print("[Cracks TTD] AutoSkip button not found")
-		pcall(function()
-			print("[Cracks TTD] AutoSkip children:")
-			for _, d in ipairs(PlayerGui.Match.TopFrame.AutoSkip:GetDescendants()) do
-				print(" ", d.ClassName, d.Name, d:GetFullName())
-			end
-		end)
-		return
-	end
-
-	print("[Cracks TTD] AutoSkip target =", btn.ClassName, btn:GetFullName())
-
-	local fired = false
-
-	pcall(function()
-		if not getconnections then
-			return
-		end
-		for _, sigName in ipairs({
-			"Activated",
-			"MouseButton1Click",
-			"MouseButton1Down",
-			"MouseButton1Up",
-			"InputBegan",
-			"InputEnded",
-		}) do
-			local sig = btn[sigName]
-			if sig then
-				for _, c in ipairs(getconnections(sig)) do
-					pcall(function()
-						if c.Function then
-							c.Function()
-						end
-						c:Fire()
-						fired = true
-					end)
-				end
-			end
-		end
-	end)
-
-	pcall(function()
-		if not firesignal then
-			return
-		end
-		firesignal(btn.Activated)
-		firesignal(btn.MouseButton1Click)
-		firesignal(btn.MouseButton1Down)
-		fired = true
-	end)
-
-	pcall(function()
-		btn:Activate()
-		fired = true
-	end)
-
-	pcall(function()
-		if btn:IsA("GuiButton") then
-			btn.Selected = not btn.Selected
-			fired = true
-		end
-	end)
-
-	pcall(function()
-		local vim = game:GetService("VirtualInputManager")
-		local abs = btn.AbsolutePosition
-		local size = btn.AbsoluteSize
-		local x = abs.X + size.X / 2
-		local y = abs.Y + size.Y / 2
-		vim:SendMouseButtonEvent(x, y, 0, true, game, 0)
-		task.wait()
-		vim:SendMouseButtonEvent(x, y, 0, false, game, 0)
-		fired = true
-	end)
-
-	print("[Cracks TTD] AutoSkip fired =", fired)
 end
 
 task.spawn(function()
 	while running do
 		if autofarm then
-			func.refreshRefs()
-
-			local lobby = func.isLobby()
-			local game_ = func.isGame()
-			local matchUi = func.hasMatchUi()
-
-			print("[Cracks TTD] loop Lobby=", lobby, "Game=", game_, "MatchUi=", matchUi)
-
-			if game_ or matchUi then
-				if not clickedSkipThisMatch then
-					task.wait(2)
-					print("[Cracks TTD] auto: clicking AutoSkip")
-					func.clickAutoFarmButtonOnce()
-					task.wait(0.5)
-					func.clickAutoFarmButtonOnce()
-					clickedSkipThisMatch = true
-					print("[Cracks TTD] auto: AutoSkip done")
+			if func.IsGame() then
+				if not clickedSkip then
+					task.wait(1)
+					func.AutoSkipRemote(1)
+					clickedSkip = true
 				end
 				task.wait(1)
-			elseif lobby then
-				clickedSkipThisMatch = false
-				print("[Cracks TTD] auto: lobby TP + Start")
-				func.TeleportToFarmLocation()
-				task.wait(0.6)
-				func.ClickStartButton()
-				task.wait(2)
+			elseif func.IsLobby() then
+				clickedSkip = false
+				func.TeleportAndStart()
+				task.wait(2.5)
 			else
-				print("[Cracks TTD] waiting (not lobby/game)")
 				task.wait(1)
 			end
 		else
-			task.wait(0.5)
+			task.wait(0.4)
 		end
-	end
-end)
-
-task.spawn(function()
-	local lastLobby = nil
-	local lastGame = nil
-	local lastChange = tick()
-
-	while running do
-		local curLobby = func.isLobby()
-		local curGame = func.isGame()
-
-		if lastLobby == nil then
-			lastLobby = curLobby
-			lastGame = curGame
-			lastChange = tick()
-		elseif curLobby ~= lastLobby or curGame ~= lastGame then
-			lastLobby = curLobby
-			lastGame = curGame
-			lastChange = tick()
-		elseif autofarm and (tick() - lastChange) >= 10 then
-			print("[Cracks TTD] safety: bools unchanged 10s Lobby=", curLobby, "Game=", curGame)
-			lastChange = tick()
-		end
-
-		task.wait(0.5)
 	end
 end)
 
@@ -411,104 +262,95 @@ LocalPlayer.Idled:Connect(function()
 end)
 
 local libSrc
-local libOk, libRes = pcall(function()
-	return game:HttpGet(
+pcall(function()
+	libSrc = game:HttpGet(
 		"https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/lib.lua",
 		true
 	)
 end)
-if libOk then
-	libSrc = libRes
-else
-	print("[Cracks TTD] lib HttpGet failed:", libRes)
-end
 
 if type(libSrc) == "string" then
-	local chunkOk, chunk = pcall(loadstring, libSrc)
-	if chunkOk and type(chunk) == "function" then
-		local runOk, Lib = pcall(chunk)
-		if runOk and type(Lib) == "table" and type(Lib.Init) == "function" then
-			local executor = "Unknown"
-			pcall(function()
-				if identifyexecutor then
-					executor = identifyexecutor()
-				end
-			end)
+	local ok, Lib = pcall(function()
+		return loadstring(libSrc)()
+	end)
+	if ok and type(Lib) == "table" and type(Lib.Init) == "function" then
+		local executor = "Unknown"
+		pcall(function()
+			if identifyexecutor then
+				executor = identifyexecutor()
+			end
+		end)
 
-			local GUI
-			pcall(function()
-				GUI = Lib:Init(
-					"Cracks Hub | TTD | " .. executor,
-					true,
-					Enum.KeyCode.LeftControl,
-					"Default",
-					{ Enabled = false }
-				)
-			end)
+		local GUI
+		pcall(function()
+			GUI = Lib:Init(
+				"Cracks Hub | TTD | " .. executor,
+				true,
+				Enum.KeyCode.LeftControl,
+				"Default",
+				{ Enabled = false }
+			)
+		end)
 
-			if GUI then
-				local function harden(sec)
-					if type(sec) ~= "table" then
-						return sec
-					end
-					if type(sec.ConfigToggle) ~= "function" and type(sec.Toggle) == "function" then
-						function sec:ConfigToggle(a, b, c)
-							return self:Toggle(a, b, c)
-						end
-					end
+		if GUI then
+			local function harden(sec)
+				if type(sec) ~= "table" then
 					return sec
 				end
-
-				local MainTab = GUI:CreateTab("Main")
-				local FarmSec = harden(MainTab:Section("Farm"))
-				local MiscSec = harden(MainTab:Section("Misc"))
-
-				FarmSec:ConfigToggle("Auto Farm", autofarm, function(v)
-					autofarm = v
-					getgenv().CracksTTD_AutoFarm = v
-					clickedSkipThisMatch = false
-					print("[Cracks TTD] Auto Farm =", v)
-					pcall(queueSelf)
-				end)
-
-				FarmSec:Button("TP ToiletHQ", function()
-					func.TeleportToFarmLocation()
-				end)
-
-				FarmSec:Button("Click Start", function()
-					func.ClickStartButton()
-				end)
-
-				FarmSec:Button("Click AutoSkip", function()
-					func.clickAutoFarmButtonOnce()
-				end)
-
-				MiscSec:ConfigToggle("Anti Afk", false, function(v)
-					AntiAfk = v
-				end)
-
-				MiscSec:Button("Unload", function()
-					running = false
-					autofarm = false
-					getgenv().CracksTTD_AutoFarm = false
-					AntiAfk = false
-					pcall(function()
-						if GUI.Unload then
-							GUI:Unload()
-						elseif GUI.Destroy then
-							GUI:Destroy()
-						end
-					end)
-				end)
-
-				print("[Cracks TTD] UI loaded — LeftControl")
+				if type(sec.ConfigToggle) ~= "function" and type(sec.Toggle) == "function" then
+					function sec:ConfigToggle(a, b, c)
+						return self:Toggle(a, b, c)
+					end
+				end
+				return sec
 			end
-		else
-			print("[Cracks TTD] lib run failed")
+
+			local MainTab = GUI:CreateTab("Main")
+			local FarmSec = harden(MainTab:Section("Farm"))
+			local MiscSec = harden(MainTab:Section("Misc"))
+
+			FarmSec:ConfigToggle("Auto Farm", autofarm, function(v)
+				autofarm = v
+				getgenv().CracksTTD_AutoFarm = v
+				clickedSkip = false
+				queueSelf()
+			end)
+
+			FarmSec:Button("TP + Start", function()
+				func.TeleportAndStart()
+			end)
+
+			FarmSec:Button("TP ToiletCity", function()
+				func.TeleportToFarmLocation()
+			end)
+
+			FarmSec:Button("Click Start", function()
+				func.ClickStartButton()
+			end)
+
+			FarmSec:Button("AutoSkip Remote", function()
+				func.AutoSkipRemote(1)
+			end)
+
+			MiscSec:ConfigToggle("Anti Afk", false, function(v)
+				AntiAfk = v
+			end)
+
+			MiscSec:Button("Unload", function()
+				running = false
+				autofarm = false
+				getgenv().CracksTTD_AutoFarm = false
+				AntiAfk = false
+				pcall(function()
+					if GUI.Unload then
+						GUI:Unload()
+					elseif GUI.Destroy then
+						GUI:Destroy()
+					end
+				end)
+			end)
 		end
-	else
-		print("[Cracks TTD] lib compile failed")
 	end
 end
 
-print("[Cracks TTD] loaded OK")
+print("[Cracks TTD] execute-on-tp ready — LeftControl")
