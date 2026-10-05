@@ -4,14 +4,52 @@ local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+local TTD_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/ttd.lua"
+local REMOTE_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/ttdremote.lua"
+
+local function isGame()
+	local v = false
+	pcall(function()
+		v = rp.IsMainGame.Value == true
+	end)
+	return v
+end
+
+local function isLobby()
+	local v = false
+	pcall(function()
+		v = rp.IsLobby.Value == true
+	end)
+	return v
+end
+
+if isGame() then
+	print("[Cracks TTD] in game → ttdremote.lua")
+	local src
+	pcall(function()
+		src = game:HttpGet(REMOTE_URL, true)
+	end)
+	if type(src) == "string" then
+		local ok, err = pcall(function()
+			loadstring(src)()
+		end)
+		if not ok then
+			warn("[Cracks TTD] ttdremote failed:", err)
+		end
+	else
+		warn("[Cracks TTD] download ttdremote failed")
+	end
+	return
+end
+
+print("[Cracks TTD] lobby → farm UI")
+
 local FarmMap = {
 	ToiletCity = {
 		Mode = "Easy",
 		TpLocation = workspace.Lifts.ToiletCity.Base,
 	},
 }
-
-local CurrentFarm = "ToiletCity"
 
 local GUIS = {
 	StartGui = nil,
@@ -26,8 +64,6 @@ local autofarm = getgenv().CracksTTD_AutoFarm == true
 local running = true
 local clickedSkip = false
 
-local SCRIPT_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/ttd.lua"
-
 local function queueSelf()
 	local code = string.format([[
 		getgenv().CracksTTD_AutoFarm = %s
@@ -39,7 +75,7 @@ local function queueSelf()
 				warn("[Cracks TTD] re-exec failed:", err)
 			end
 		end)
-	]], tostring(getgenv().CracksTTD_AutoFarm == true), SCRIPT_URL)
+	]], tostring(getgenv().CracksTTD_AutoFarm == true), TTD_URL)
 
 	local queued = false
 	for _, fn in ipairs({
@@ -50,8 +86,7 @@ local function queueSelf()
 		getgenv().queue_on_teleport,
 	}) do
 		if typeof(fn) == "function" then
-			local ok = pcall(fn, code)
-			if ok then
+			if pcall(fn, code) then
 				queued = true
 			end
 		end
@@ -60,14 +95,12 @@ local function queueSelf()
 	if queued then
 		print("[Cracks TTD] execute-on-tp queued")
 	else
-		warn("[Cracks TTD] no queue_on_teleport — put script in AutoExec")
+		warn("[Cracks TTD] no queue_on_teleport — use AutoExec")
 	end
 end
 
--- queue every time this place loads
 queueSelf()
 
--- re-queue when leaving this place
 pcall(function()
 	LocalPlayer.OnTeleport:Connect(function(state)
 		if state == Enum.TeleportState.Started or state == Enum.TeleportState.RequestedFromServer then
@@ -77,10 +110,6 @@ pcall(function()
 end)
 
 local func = {}
-
-function func.GetFarm()
-	return FarmMap.ToiletCity
-end
 
 function func.TeleportToFarmLocation()
 	local part
@@ -187,7 +216,6 @@ function func.AutoSkipRemote(callamt)
 		print("[Cracks TTD] DataRemote missing")
 		return
 	end
-
 	for _ = 1, callamt do
 		pcall(function()
 			Event:FireServer({
@@ -202,19 +230,11 @@ function func.AutoSkipRemote(callamt)
 end
 
 function func.IsLobby()
-	local v = false
-	pcall(function()
-		v = rp.IsLobby.Value == true
-	end)
-	return v
+	return isLobby()
 end
 
 function func.IsGame()
-	local v = false
-	pcall(function()
-		v = rp.IsMainGame.Value == true
-	end)
-	return v
+	return isGame()
 end
 
 task.spawn(function()
@@ -226,9 +246,16 @@ task.spawn(function()
 					func.AutoSkipRemote(1)
 					clickedSkip = true
 				end
+				if not getgenv().CracksTTD_RemoteLoaded then
+					getgenv().CracksTTD_RemoteLoaded = true
+					pcall(function()
+						loadstring(game:HttpGet(REMOTE_URL, true))()
+					end)
+				end
 				task.wait(1)
 			elseif func.IsLobby() then
 				clickedSkip = false
+				getgenv().CracksTTD_RemoteLoaded = false
 				func.TeleportAndStart()
 				task.wait(2.5)
 			else
@@ -332,6 +359,12 @@ if type(libSrc) == "string" then
 				func.AutoSkipRemote(1)
 			end)
 
+			FarmSec:Button("Load Place Remote", function()
+				pcall(function()
+					loadstring(game:HttpGet(REMOTE_URL, true))()
+				end)
+			end)
+
 			MiscSec:ConfigToggle("Anti Afk", false, function(v)
 				AntiAfk = v
 			end)
@@ -353,4 +386,4 @@ if type(libSrc) == "string" then
 	end
 end
 
-print("[Cracks TTD] execute-on-tp ready — LeftControl")
+print("[Cracks TTD] lobby farm ready — LeftControl")
