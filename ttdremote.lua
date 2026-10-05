@@ -8,7 +8,7 @@ local UNIT = "DarkCamerawoman"
 local POS = Vector3.new(-78.71192932128906, 2.3471102714538574, -56.20001220703125)
 local SLOT = 1
 
-local Thresholds = { 200, 300, 500, 700 }
+local PlaceCosts = { 200, 300, 500, 700 }
 local Fired = {}
 
 local function getMoney()
@@ -33,18 +33,23 @@ local function placeUnit()
 	print("[TTD Remote] placed", UNIT, "money=", getMoney())
 end
 
-task.spawn(function()
-	while true do
-		local money = getMoney()
-		for _, need in ipairs(Thresholds) do
-			if money >= need and not Fired[need] then
-				Fired[need] = true
-				placeUnit()
-				task.wait(0.2)
-			end
-		end
+local function waitMoney(need)
+	while getMoney() < need do
 		task.wait(0.25)
 	end
+end
+
+task.spawn(function()
+	for _, need in ipairs(PlaceCosts) do
+		if not Fired[need] then
+			print("[TTD Remote] wait money >=", need)
+			waitMoney(need)
+			Fired[need] = true
+			placeUnit()
+			task.wait(0.35)
+		end
+	end
+	print("[TTD Remote] all places done")
 end)
 
-print("[TTD Remote] watching Money thresholds", table.concat(Thresholds, ", "))
+print("[TTD Remote] loaded money=", getMoney())
