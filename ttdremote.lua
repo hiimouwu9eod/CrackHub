@@ -9,7 +9,8 @@ local POS = Vector3.new(-78.71192932128906, 2.3471102714538574, -56.200012207031
 local SLOT = 1
 
 local PlaceCosts = { 200, 300, 500, 700 }
-local Fired = {}
+local Cooldown = 0.5
+local LastPlace = {}
 
 local function getMoney()
 	local v = 0
@@ -33,23 +34,21 @@ local function placeUnit()
 	print("[TTD Remote] placed", UNIT, "money=", getMoney())
 end
 
-local function waitMoney(need)
-	while getMoney() < need do
+task.spawn(function()
+	while true do
+		local money = getMoney()
+		for _, need in ipairs(PlaceCosts) do
+			if money >= need then
+				local last = LastPlace[need] or 0
+				if tick() - last >= Cooldown then
+					LastPlace[need] = tick()
+					placeUnit()
+					task.wait(0.15)
+				end
+			end
+		end
 		task.wait(0.25)
 	end
-end
-
-task.spawn(function()
-	for _, need in ipairs(PlaceCosts) do
-		if not Fired[need] then
-			print("[TTD Remote] wait money >=", need)
-			waitMoney(need)
-			Fired[need] = true
-			placeUnit()
-			task.wait(0.35)
-		end
-	end
-	print("[TTD Remote] all places done")
 end)
 
-print("[TTD Remote] on load money=", getMoney())
+print("[TTD Remote] looping places | money=", getMoney())
