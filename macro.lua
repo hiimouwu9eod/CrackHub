@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local VIM = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
 
 local FOLDER = "CracksMacros"
 local FILE = FOLDER .. "/macros.json"
@@ -22,6 +23,7 @@ local RecordBuf = {}
 local RecStart = 0
 local PlayToken = 0
 local Connections = {}
+local LastMouseRec = Vector2.zero
 
 local Opt = {
 	RecordCamera = true,
@@ -35,7 +37,7 @@ local Opt = {
 	MoveDist = 1.25,
 	CamDist = 0.12,
 	CamDot = 0.998,
-	MouseMoveDist = 4,
+	MouseMoveDist = 2,
 }
 
 local KeyRecord = Enum.KeyCode.R
@@ -68,6 +70,79 @@ end
 local function getHum()
 	local c = LocalPlayer.Character
 	return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function getMousePos()
+	local p = safe(function()
+		return UIS:GetMouseLocation()
+	end)
+	if p then
+		return p.X, p.Y
+	end
+	return Mouse.X, Mouse.Y
+end
+
+local function moveMouseTo(x, y)
+	x = tonumber(x) or 0
+	y = tonumber(y) or 0
+
+	-- 1) VirtualInputManager
+	safe(function()
+		VIM:SendMouseMoveEvent(x, y, game)
+	end)
+
+	-- 2) some executors
+	safe(function()
+		if mousemoveabs then
+			mousemoveabs(x, y)
+		end
+	end)
+	safe(function()
+		if syn and syn.mousemoveabs then
+			syn.mousemoveabs(x, y)
+		end
+	end)
+	safe(function()
+		if mouse_move then
+			mouse_move(x, y)
+		end
+	end)
+
+	-- 3) force InputChanged-style by tiny jitter then set
+	safe(function()
+		VIM:SendMouseMoveEvent(x + 0.01, y + 0.01, game)
+		VIM:SendMouseMoveEvent(x, y, game)
+	end)
+end
+
+local function mouseButton(x, y, btn, down)
+	x = tonumber(x) or 0
+	y = tonumber(y) or 0
+	btn = tonumber(btn) or 0
+	moveMouseTo(x, y)
+	task.wait()
+	safe(function()
+		VIM:SendMouseButtonEvent(x, y, btn, down == true, game, 0)
+	end)
+	safe(function()
+		if down then
+			if btn == 0 and mouse1click then
+				-- don't full click if we send down/up separately
+			end
+		end
+	end)
+	safe(function()
+		if down and mouse1press and btn == 0 then
+			mouse1press()
+		elseif not down and mouse1release and btn == 0 then
+			mouse1release()
+		end
+		if down and mouse2press and btn == 1 then
+			mouse2press()
+		elseif not down and mouse2release and btn == 1 then
+			mouse2release()
+		end
+	end)
 end
 
 local function ensureFolder()
@@ -156,6 +231,9 @@ local function startRecord()
 	Recording = true
 	RecordBuf = {}
 	RecStart = tick()
+	local x, y = getMousePos()
+	LastMouseRec = Vector2.new(x, y)
+	pushEvent({ k = "mouse", x = x, y = y, move = true })
 	print("[Macro] REC start")
 end
 
@@ -263,18 +341,19 @@ local function playMacro(name)
 					end
 				end
 			elseif kind == "mouse" and Opt.PlayMouse then
-				safe(function()
-					local x, y = ev.x or 0, ev.y or 0
-					if ev.move then
-						VIM:SendMouseMoveEvent(x, y, game)
-					end
-					if ev.btn ~= nil and ev.down ~= nil then
-						VIM:SendMouseButtonEvent(x, y, ev.btn, ev.down == true, game, 0)
-					end
-					if ev.wheel then
+				local x, y = ev.x or 0, ev.y or 0
+				if ev.move then
+					moveMouseTo(x, y)
+				end
+				if ev.btn ~= nil and ev.down ~= nil then
+					mouseButton(x, y, ev.btn, ev.down)
+				end
+				if ev.wheel then
+					moveMouseTo(x, y)
+					safe(function()
 						VIM:SendMouseWheelEvent(x, y, ev.wheel > 0, game)
-					end
-				end)
+					end)
+				end
 			end
 		end
 
@@ -288,7 +367,6 @@ local function playMacro(name)
 	end)
 end
 
--- INPUT
 table.insert(Connections, UIS.InputBegan:Connect(function(input, gp)
 	safe(function()
 		if input.KeyCode == KeyStop then
@@ -319,8 +397,8 @@ table.insert(Connections, UIS.InputBegan:Connect(function(input, gp)
 		if Opt.RecordMouse then
 			local btn = MouseBtnMap[input.UserInputType]
 			if btn ~= nil then
-				local p = input.Position
-				pushEvent({ k = "mouse", x = p.X, y = p.Y, btn = btn, down = true })
+				local x, y = getMousePos()
+				pushEvent({ k = "mouse", x = x, y = y, btn = btn, down = true })
 			end
 		end
 	end)
@@ -337,48 +415,33 @@ table.insert(Connections, UIS.InputEnded:Connect(function(input)
 		if Opt.RecordMouse then
 			local btn = MouseBtnMap[input.UserInputType]
 			if btn ~= nil then
-				local p = input.Position
-				pushEvent({ k = "mouse", x = p.X, y = p.Y, btn = btn, down = false })
+				local x, y = getMousePos()
+				pushEvent({ k = "mouse", x = x, y = y, btn = btn, down = false })
 			end
 		end
 	end)
 end))
 
-table.insert(Connections, UIS.InputChanged:Connect(function(input)
-	safe(function()
-		if not Recording or not Opt.RecordMouse then
-			return
-		end
-		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			local p = input.Position
-			local last
-			for i = #RecordBuf, 1, -1 do
-				if RecordBuf[i].k == "mouse" and RecordBuf[i].move then
-					last = RecordBuf[i]
-					break
-				end
-			end
-			if not last or (Vector2.new(last.x, last.y) - Vector2.new(p.X, p.Y)).Magnitude >= Opt.MouseMoveDist then
-				pushEvent({ k = "mouse", x = p.X, y = p.Y, move = true })
-			end
-		elseif input.UserInputType == Enum.UserInputType.MouseWheel then
-			local p = UIS:GetMouseLocation()
-			pushEvent({ k = "mouse", x = p.X, y = p.Y, wheel = input.Position.Z })
-		end
-	end)
-end))
-
--- MOVE + CAMERA
+-- continuous mouse track (fixes move not recording)
 table.insert(Connections, RunService.RenderStepped:Connect(function()
 	safe(function()
 		if not Recording then
 			return
 		end
 
+		if Opt.RecordMouse then
+			local x, y = getMousePos()
+			local pos = Vector2.new(x, y)
+			if (pos - LastMouseRec).Magnitude >= Opt.MouseMoveDist then
+				LastMouseRec = pos
+				pushEvent({ k = "mouse", x = x, y = y, move = true })
+			end
+		end
+
 		if Opt.RecordMove then
 			local root = getRoot()
 			if root then
-				local pos = root.Position
+				local p = root.Position
 				local yaw = math.deg(select(2, root.CFrame:ToEulerAnglesYXZ()))
 				local last
 				for i = #RecordBuf, 1, -1 do
@@ -387,8 +450,8 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 						break
 					end
 				end
-				if not last or (Vector3.new(last.x, last.y, last.z) - pos).Magnitude >= Opt.MoveDist then
-					pushEvent({ k = "cf", x = pos.X, y = pos.Y, z = pos.Z, yaw = yaw })
+				if not last or (Vector3.new(last.x, last.y, last.z) - p).Magnitude >= Opt.MoveDist then
+					pushEvent({ k = "cf", x = p.X, y = p.Y, z = p.Z, yaw = yaw })
 				end
 			end
 		end
@@ -407,11 +470,9 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 				local should = true
 				if last and last.cf then
 					local prev = tableToCf(last.cf)
-					if prev then
-						if (prev.Position - cf.Position).Magnitude < Opt.CamDist and prev.LookVector:Dot(cf.LookVector) > Opt.CamDot then
-							if math.abs((last.fov or 70) - c.FieldOfView) < 0.4 then
-								should = false
-							end
+					if prev and (prev.Position - cf.Position).Magnitude < Opt.CamDist and prev.LookVector:Dot(cf.LookVector) > Opt.CamDot then
+						if math.abs((last.fov or 70) - c.FieldOfView) < 0.4 then
+							should = false
 						end
 					end
 				end
@@ -419,6 +480,18 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 					pushEvent({ k = "cam", cf = cfToTable(cf), fov = c.FieldOfView })
 				end
 			end
+		end
+	end)
+end))
+
+table.insert(Connections, UIS.InputChanged:Connect(function(input)
+	safe(function()
+		if not Recording or not Opt.RecordMouse then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseWheel then
+			local x, y = getMousePos()
+			pushEvent({ k = "mouse", x = x, y = y, wheel = input.Position.Z })
 		end
 	end)
 end))
@@ -504,7 +577,6 @@ if type(libSrc) == "string" then
 			local tab = GUI:CreateTab("Macro")
 			local sec = harden(tab:Section("Recorder"))
 			local opt = harden(tab:Section("Capture"))
-			local bind = harden(tab:Section("Keybinds"))
 			local misc = harden(tab:Section("Misc"))
 
 			local list = namesList()
@@ -571,43 +643,21 @@ if type(libSrc) == "string" then
 				end
 			end)
 
-			opt:ConfigToggle("Record Move", true, function(v)
+			opt:ConfigToggle("Record / Play Move", true, function(v)
 				Opt.RecordMove = v
-			end)
-			opt:ConfigToggle("Play Move", true, function(v)
 				Opt.PlayMove = v
 			end)
-			opt:ConfigToggle("Record Camera", true, function(v)
+			opt:ConfigToggle("Record / Play Camera", true, function(v)
 				Opt.RecordCamera = v
-			end)
-			opt:ConfigToggle("Play Camera", true, function(v)
 				Opt.PlayCamera = v
 			end)
-			opt:ConfigToggle("Record Keys", true, function(v)
+			opt:ConfigToggle("Record / Play Keys", true, function(v)
 				Opt.RecordKeys = v
-			end)
-			opt:ConfigToggle("Play Keys", true, function(v)
 				Opt.PlayKeys = v
 			end)
-			opt:ConfigToggle("Record Mouse", true, function(v)
+			opt:ConfigToggle("Record / Play Mouse", true, function(v)
 				Opt.RecordMouse = v
-			end)
-			opt:ConfigToggle("Play Mouse", true, function(v)
 				Opt.PlayMouse = v
-			end)
-
-			safe(function()
-				if bind.Keybind then
-					bind:Keybind("Record", KeyRecord, function(k)
-						KeyRecord = k
-					end)
-					bind:Keybind("Play", KeyPlay, function(k)
-						KeyPlay = k
-					end)
-					bind:Keybind("Stop", KeyStop, function(k)
-						KeyStop = k
-					end)
-				end
 			end)
 
 			misc:Button("Unload", function()
@@ -631,4 +681,4 @@ if type(libSrc) == "string" then
 	end
 end
 
-print("[Macro] full capture ready | move cam keys mouse | R/P/X | LeftControl")
+print("[Macro] mouse move fixed | R/P/X | LeftControl")
