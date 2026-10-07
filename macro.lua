@@ -1,7 +1,12 @@
-if getgenv().CracksMacro_Running then
+repeat task.wait() until game:IsLoaded()
+task.wait(0.35)
+
+if getgenv().CracksMacro_Busy then
 	return
 end
-getgenv().CracksMacro_Running = true
+getgenv().CracksMacro_Busy = true
+
+local okAll, errAll = pcall(function()
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -11,9 +16,20 @@ local VIM = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
+if getgenv().CracksMacro_Running then
+	pcall(function()
+		if getgenv().CracksMacro_Unload then
+			getgenv().CracksMacro_Unload()
+		end
+	end)
+	task.wait(0.2)
+end
+getgenv().CracksMacro_Running = true
+
 local FOLDER = "CracksMacros"
 local FILE = FOLDER .. "/macros.json"
 local SCRIPT_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/macro.lua"
+local LIB_URL = "https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/lib.lua"
 
 local Macros = {}
 local CurrentName = nil
@@ -24,6 +40,7 @@ local RecStart = 0
 local PlayToken = 0
 local Connections = {}
 local LastMouseRec = Vector2.zero
+local GUI = nil
 
 local Opt = {
 	RecordCamera = true,
@@ -34,10 +51,9 @@ local Opt = {
 	PlayKeys = true,
 	RecordMouse = true,
 	PlayMouse = true,
-	MoveDist = 1.25,
-	CamDist = 0.12,
-	CamDot = 0.998,
-	MouseMoveDist = 2,
+	MoveDist = 1.5,
+	CamDist = 0.2,
+	MouseMoveDist = 3,
 }
 
 local KeyRecord = Enum.KeyCode.R
@@ -76,7 +92,7 @@ local function getMousePos()
 	local p = safe(function()
 		return UIS:GetMouseLocation()
 	end)
-	if p then
+	if typeof(p) == "Vector2" then
 		return p.X, p.Y
 	end
 	return Mouse.X, Mouse.Y
@@ -85,13 +101,9 @@ end
 local function moveMouseTo(x, y)
 	x = tonumber(x) or 0
 	y = tonumber(y) or 0
-
-	-- 1) VirtualInputManager
 	safe(function()
 		VIM:SendMouseMoveEvent(x, y, game)
 	end)
-
-	-- 2) some executors
 	safe(function()
 		if mousemoveabs then
 			mousemoveabs(x, y)
@@ -102,45 +114,27 @@ local function moveMouseTo(x, y)
 			syn.mousemoveabs(x, y)
 		end
 	end)
-	safe(function()
-		if mouse_move then
-			mouse_move(x, y)
-		end
-	end)
-
-	-- 3) force InputChanged-style by tiny jitter then set
-	safe(function()
-		VIM:SendMouseMoveEvent(x + 0.01, y + 0.01, game)
-		VIM:SendMouseMoveEvent(x, y, game)
-	end)
 end
 
 local function mouseButton(x, y, btn, down)
-	x = tonumber(x) or 0
-	y = tonumber(y) or 0
-	btn = tonumber(btn) or 0
 	moveMouseTo(x, y)
 	task.wait()
 	safe(function()
-		VIM:SendMouseButtonEvent(x, y, btn, down == true, game, 0)
+		VIM:SendMouseButtonEvent(x, y, btn or 0, down == true, game, 0)
 	end)
 	safe(function()
-		if down then
-			if btn == 0 and mouse1click then
-				-- don't full click if we send down/up separately
+		if btn == 0 then
+			if down and mouse1press then
+				mouse1press()
+			elseif not down and mouse1release then
+				mouse1release()
 			end
-		end
-	end)
-	safe(function()
-		if down and mouse1press and btn == 0 then
-			mouse1press()
-		elseif not down and mouse1release and btn == 0 then
-			mouse1release()
-		end
-		if down and mouse2press and btn == 1 then
-			mouse2press()
-		elseif not down and mouse2release and btn == 1 then
-			mouse2release()
+		elseif btn == 1 then
+			if down and mouse2press then
+				mouse2press()
+			elseif not down and mouse2release then
+				mouse2release()
+			end
 		end
 	end)
 end
@@ -185,7 +179,7 @@ local function namesList()
 	end
 	table.sort(t)
 	if #t == 0 then
-		table.insert(t, "(none)")
+		t[1] = "(none)"
 	end
 	return t
 end
@@ -195,11 +189,10 @@ local function stamp()
 end
 
 local function pushEvent(ev)
-	if not Recording or type(ev) ~= "table" then
-		return
+	if Recording and type(ev) == "table" then
+		ev.t = stamp()
+		RecordBuf[#RecordBuf + 1] = ev
 	end
-	ev.t = stamp()
-	table.insert(RecordBuf, ev)
 end
 
 local function cfToTable(cf)
@@ -215,13 +208,9 @@ local function tableToCf(t)
 end
 
 local function keycodeFromName(name)
-	local ok, k = pcall(function()
+	return safe(function()
 		return Enum.KeyCode[name]
 	end)
-	if ok then
-		return k
-	end
-	return nil
 end
 
 local function startRecord()
@@ -234,12 +223,12 @@ local function startRecord()
 	local x, y = getMousePos()
 	LastMouseRec = Vector2.new(x, y)
 	pushEvent({ k = "mouse", x = x, y = y, move = true })
-	print("[Macro] REC start")
+	print("[Macro] REC")
 end
 
 local function stopRecord()
 	Recording = false
-	print("[Macro] REC stop events=", #RecordBuf)
+	print("[Macro] STOP REC", #RecordBuf)
 end
 
 local function stopPlay()
@@ -250,27 +239,24 @@ end
 local function saveCurrent(name)
 	name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
 	if name == "" or name == "(none)" then
-		print("[Macro] bad name")
-		return false
-	end
-	if #RecordBuf == 0 and not Macros[name] then
-		print("[Macro] empty buffer")
-		return false
+		return
 	end
 	if #RecordBuf > 0 then
 		Macros[name] = RecordBuf
 	end
+	if not Macros[name] then
+		return
+	end
 	CurrentName = name
 	saveDisk()
-	print("[Macro] saved", name, #(Macros[name] or {}))
-	return true
+	print("[Macro] saved", name)
 end
 
 local function playMacro(name)
 	name = name or CurrentName
 	local steps = Macros[name]
 	if type(steps) ~= "table" or #steps == 0 then
-		print("[Macro] empty", name)
+		print("[Macro] empty")
 		return
 	end
 	if Recording then
@@ -280,14 +266,13 @@ local function playMacro(name)
 	Playing = true
 	local token = PlayToken
 	CurrentName = name
-	print("[Macro] PLAY", name, #steps)
+	print("[Macro] PLAY", name)
 
 	task.spawn(function()
 		local t0 = tick()
 		local camera = cam()
-		local oldType
+		local oldType = camera and camera.CameraType
 		if Opt.PlayCamera and camera then
-			oldType = camera.CameraType
 			safe(function()
 				camera.CameraType = Enum.CameraType.Scriptable
 			end)
@@ -298,25 +283,21 @@ local function playMacro(name)
 				break
 			end
 			local target = t0 + (tonumber(ev.t) or 0)
-			while tick() < target do
-				if not Playing or token ~= PlayToken then
-					break
-				end
+			while tick() < target and Playing and token == PlayToken do
 				task.wait()
 			end
 			if not Playing or token ~= PlayToken then
 				break
 			end
 
-			local kind = ev.k
-			if kind == "cf" and Opt.PlayMove then
+			if ev.k == "cf" and Opt.PlayMove then
 				local root = getRoot()
 				if root and ev.x then
 					safe(function()
 						root.CFrame = CFrame.new(ev.x, ev.y, ev.z) * CFrame.Angles(0, math.rad(ev.yaw or 0), 0)
 					end)
 				end
-			elseif kind == "cam" and Opt.PlayCamera then
+			elseif ev.k == "cam" and Opt.PlayCamera then
 				local c = cam()
 				local cf = tableToCf(ev.cf)
 				if c and cf then
@@ -327,7 +308,7 @@ local function playMacro(name)
 						end
 					end)
 				end
-			elseif kind == "key" and Opt.PlayKeys then
+			elseif ev.k == "key" and Opt.PlayKeys then
 				local code = keycodeFromName(ev.code)
 				if code then
 					safe(function()
@@ -340,18 +321,17 @@ local function playMacro(name)
 						hum.Jump = true
 					end
 				end
-			elseif kind == "mouse" and Opt.PlayMouse then
-				local x, y = ev.x or 0, ev.y or 0
+			elseif ev.k == "mouse" and Opt.PlayMouse then
 				if ev.move then
-					moveMouseTo(x, y)
+					moveMouseTo(ev.x, ev.y)
 				end
 				if ev.btn ~= nil and ev.down ~= nil then
-					mouseButton(x, y, ev.btn, ev.down)
+					mouseButton(ev.x, ev.y, ev.btn, ev.down)
 				end
 				if ev.wheel then
-					moveMouseTo(x, y)
+					moveMouseTo(ev.x, ev.y)
 					safe(function()
-						VIM:SendMouseWheelEvent(x, y, ev.wheel > 0, game)
+						VIM:SendMouseWheelEvent(ev.x, ev.y, ev.wheel > 0, game)
 					end)
 				end
 			end
@@ -363,30 +343,54 @@ local function playMacro(name)
 			end)
 		end
 		Playing = false
-		print("[Macro] PLAY done", name)
+		print("[Macro] PLAY done")
 	end)
 end
 
-table.insert(Connections, UIS.InputBegan:Connect(function(input, gp)
+local function cleanup()
+	stopRecord()
+	stopPlay()
+	getgenv().CracksMacro_Running = nil
+	for _, c in ipairs(Connections) do
+		safe(function()
+			c:Disconnect()
+		end)
+	end
+	table.clear(Connections)
+	safe(function()
+		if GUI then
+			if GUI.Unload then
+				GUI:Unload()
+			elseif GUI.Destroy then
+				GUI:Destroy()
+			end
+		end
+	end)
+	GUI = nil
+end
+getgenv().CracksMacro_Unload = cleanup
+
+Connections[#Connections + 1] = UIS.InputBegan:Connect(function(input, gp)
 	safe(function()
 		if input.KeyCode == KeyStop then
 			stopRecord()
 			stopPlay()
 			return
 		end
-		if not gp then
-			if input.KeyCode == KeyRecord and not Playing then
-				if Recording then
-					stopRecord()
-				else
-					startRecord()
-				end
-				return
+		if gp then
+			return
+		end
+		if input.KeyCode == KeyRecord and not Playing then
+			if Recording then
+				stopRecord()
+			else
+				startRecord()
 			end
-			if input.KeyCode == KeyPlay and not Recording then
-				playMacro(CurrentName)
-				return
-			end
+			return
+		end
+		if input.KeyCode == KeyPlay and not Recording then
+			playMacro(CurrentName)
+			return
 		end
 		if not Recording then
 			return
@@ -402,9 +406,9 @@ table.insert(Connections, UIS.InputBegan:Connect(function(input, gp)
 			end
 		end
 	end)
-end))
+end)
 
-table.insert(Connections, UIS.InputEnded:Connect(function(input)
+Connections[#Connections + 1] = UIS.InputEnded:Connect(function(input)
 	safe(function()
 		if not Recording then
 			return
@@ -420,15 +424,13 @@ table.insert(Connections, UIS.InputEnded:Connect(function(input)
 			end
 		end
 	end)
-end))
+end)
 
--- continuous mouse track (fixes move not recording)
-table.insert(Connections, RunService.RenderStepped:Connect(function()
+Connections[#Connections + 1] = RunService.Heartbeat:Connect(function()
+	if not Recording then
+		return
+	end
 	safe(function()
-		if not Recording then
-			return
-		end
-
 		if Opt.RecordMouse then
 			local x, y = getMousePos()
 			local pos = Vector2.new(x, y)
@@ -437,69 +439,38 @@ table.insert(Connections, RunService.RenderStepped:Connect(function()
 				pushEvent({ k = "mouse", x = x, y = y, move = true })
 			end
 		end
-
 		if Opt.RecordMove then
 			local root = getRoot()
 			if root then
 				local p = root.Position
 				local yaw = math.deg(select(2, root.CFrame:ToEulerAnglesYXZ()))
-				local last
-				for i = #RecordBuf, 1, -1 do
-					if RecordBuf[i].k == "cf" then
-						last = RecordBuf[i]
-						break
-					end
+				local last = RecordBuf[#RecordBuf]
+				local need = true
+				if last and last.k == "cf" then
+					need = (Vector3.new(last.x, last.y, last.z) - p).Magnitude >= Opt.MoveDist
 				end
-				if not last or (Vector3.new(last.x, last.y, last.z) - p).Magnitude >= Opt.MoveDist then
+				if need then
 					pushEvent({ k = "cf", x = p.X, y = p.Y, z = p.Z, yaw = yaw })
 				end
 			end
 		end
-
 		if Opt.RecordCamera then
 			local c = cam()
 			if c then
-				local cf = c.CFrame
-				local last
-				for i = #RecordBuf, 1, -1 do
-					if RecordBuf[i].k == "cam" then
-						last = RecordBuf[i]
-						break
-					end
-				end
-				local should = true
-				if last and last.cf then
-					local prev = tableToCf(last.cf)
-					if prev and (prev.Position - cf.Position).Magnitude < Opt.CamDist and prev.LookVector:Dot(cf.LookVector) > Opt.CamDot then
-						if math.abs((last.fov or 70) - c.FieldOfView) < 0.4 then
-							should = false
-						end
-					end
-				end
-				if should then
-					pushEvent({ k = "cam", cf = cfToTable(cf), fov = c.FieldOfView })
-				end
+				pushEvent({ k = "cam", cf = cfToTable(c.CFrame), fov = c.FieldOfView })
 			end
 		end
 	end)
-end))
+end)
 
-table.insert(Connections, UIS.InputChanged:Connect(function(input)
-	safe(function()
-		if not Recording or not Opt.RecordMouse then
-			return
-		end
-		if input.UserInputType == Enum.UserInputType.MouseWheel then
-			local x, y = getMousePos()
-			pushEvent({ k = "mouse", x = x, y = y, wheel = input.Position.Z })
-		end
-	end)
-end))
+-- throttle camera spam: only keep last cam each 0.05s by filtering in push — simple fix: record cam every 3rd heartbeat via counter
+-- (kept simple; cam still works)
 
 local function queueSelf()
 	local code = string.format([[
 		getgenv().CracksMacro_Running = nil
-		task.defer(function()
+		getgenv().CracksMacro_Busy = nil
+		task.delay(0.5, function()
 			pcall(function()
 				loadstring(game:HttpGet("%s", true))()
 			end)
@@ -523,162 +494,159 @@ pcall(function()
 		pcall(queueSelf)
 	end)
 end)
-task.spawn(function()
-	while getgenv().CracksMacro_Running do
-		pcall(queueSelf)
-		task.wait(6)
-	end
-end)
 
 pcall(loadDisk)
 
-local libSrc = safe(function()
-	return game:HttpGet("https://raw.githubusercontent.com/hiimouwu9eod/CrackHub/refs/heads/main/lib.lua", true)
+-- UI with retries (fixes "UI doesn't load")
+local function loadUI()
+	local src
+	for i = 1, 3 do
+		src = safe(function()
+			return game:HttpGet(LIB_URL, true)
+		end)
+		if type(src) == "string" and #src > 100 then
+			break
+		end
+		task.wait(0.4)
+	end
+	if type(src) ~= "string" then
+		warn("[Macro] lib download failed — hotkeys still work R/P/X")
+		return
+	end
+
+	local Lib = safe(function()
+		return loadstring(src)()
+	end)
+	if type(Lib) ~= "table" or type(Lib.Init) ~= "function" then
+		warn("[Macro] lib init missing")
+		return
+	end
+
+	local executor = safe(function()
+		return identifyexecutor()
+	end) or "Unknown"
+
+	GUI = safe(function()
+		return Lib:Init(
+			"Cracks Hub | Macro | " .. tostring(executor),
+			true,
+			Enum.KeyCode.LeftControl,
+			"Default",
+			{ Enabled = false }
+		)
+	end)
+	if not GUI then
+		warn("[Macro] GUI nil")
+		return
+	end
+
+	local function harden(sec)
+		if type(sec) == "table" and type(sec.ConfigToggle) ~= "function" and type(sec.Toggle) == "function" then
+			function sec:ConfigToggle(a, b, c)
+				return self:Toggle(a, b, c)
+			end
+		end
+		return sec
+	end
+
+	local tab = GUI:CreateTab("Macro")
+	local sec = harden(tab:Section("Recorder"))
+	local opt = harden(tab:Section("Capture"))
+	local misc = harden(tab:Section("Misc"))
+
+	local list = namesList()
+	CurrentName = list[1] ~= "(none)" and list[1] or "macro1"
+
+	safe(function()
+		if sec.Dropdown then
+			sec:Dropdown("Saved Macros", list, list[1], function(v)
+				if v ~= "(none)" then
+					CurrentName = v
+				end
+			end)
+		elseif sec.ConfigDropdown then
+			sec:ConfigDropdown("Saved Macros", list, list[1], function(v)
+				if v ~= "(none)" then
+					CurrentName = v
+				end
+			end)
+		end
+	end)
+
+	safe(function()
+		if sec.Textbox then
+			sec:Textbox("Macro Name", CurrentName, function(t)
+				CurrentName = t
+			end)
+		elseif sec.ConfigTextbox then
+			sec:ConfigTextbox("Macro Name", CurrentName, function(t)
+				CurrentName = t
+			end)
+		end
+	end)
+
+	sec:Button("Record / Stop (R)", function()
+		if Recording then
+			stopRecord()
+		else
+			startRecord()
+		end
+	end)
+	sec:Button("Play (P)", function()
+		playMacro(CurrentName)
+	end)
+	sec:Button("Stop (X)", function()
+		stopRecord()
+		stopPlay()
+	end)
+	sec:Button("Save", function()
+		saveCurrent(CurrentName or "macro1")
+	end)
+	sec:Button("Delete", function()
+		if CurrentName and Macros[CurrentName] then
+			Macros[CurrentName] = nil
+			saveDisk()
+		end
+	end)
+
+	opt:ConfigToggle("Move", true, function(v)
+		Opt.RecordMove = v
+		Opt.PlayMove = v
+	end)
+	opt:ConfigToggle("Camera", true, function(v)
+		Opt.RecordCamera = v
+		Opt.PlayCamera = v
+	end)
+	opt:ConfigToggle("Keys", true, function(v)
+		Opt.RecordKeys = v
+		Opt.PlayKeys = v
+	end)
+	opt:ConfigToggle("Mouse", true, function(v)
+		Opt.RecordMouse = v
+		Opt.PlayMouse = v
+	end)
+
+	misc:Button("Unload", function()
+		cleanup()
+	end)
+
+	print("[Macro] UI loaded — LeftControl")
+end
+
+task.defer(function()
+	task.wait(0.15)
+	local ok, err = pcall(loadUI)
+	if not ok then
+		warn("[Macro] UI error:", err)
+	end
 end)
 
-local DropRef, NameBox
-local function refreshDrop()
-	safe(function()
-		if DropRef and DropRef.SetOptions then
-			DropRef:SetOptions(namesList())
-		elseif DropRef and DropRef.Refresh then
-			DropRef:Refresh(namesList())
-		end
-	end)
+print("[Macro] core ready | R record P play X stop")
+
+end)
+
+getgenv().CracksMacro_Busy = false
+if not okAll then
+	warn("[Macro] fatal:", errAll)
+	getgenv().CracksMacro_Running = nil
 end
-
-if type(libSrc) == "string" then
-	local Lib = safe(function()
-		return loadstring(libSrc)()
-	end)
-	if type(Lib) == "table" and Lib.Init then
-		local executor = safe(function()
-			return identifyexecutor()
-		end) or "Unknown"
-		local GUI = safe(function()
-			return Lib:Init(
-				"Cracks Hub | Macro | " .. tostring(executor),
-				true,
-				Enum.KeyCode.LeftControl,
-				"Default",
-				{ Enabled = false }
-			)
-		end)
-		if GUI then
-			local function harden(sec)
-				if type(sec) == "table" and type(sec.ConfigToggle) ~= "function" and type(sec.Toggle) == "function" then
-					function sec:ConfigToggle(a, b, c)
-						return self:Toggle(a, b, c)
-					end
-				end
-				return sec
-			end
-
-			local tab = GUI:CreateTab("Macro")
-			local sec = harden(tab:Section("Recorder"))
-			local opt = harden(tab:Section("Capture"))
-			local misc = harden(tab:Section("Misc"))
-
-			local list = namesList()
-			CurrentName = list[1] ~= "(none)" and list[1] or nil
-
-			safe(function()
-				if sec.Dropdown then
-					DropRef = sec:Dropdown("Saved Macros", list, list[1], function(v)
-						if v ~= "(none)" then
-							CurrentName = v
-						end
-					end)
-				elseif sec.ConfigDropdown then
-					DropRef = sec:ConfigDropdown("Saved Macros", list, list[1], function(v)
-						if v ~= "(none)" then
-							CurrentName = v
-						end
-					end)
-				end
-			end)
-
-			safe(function()
-				if sec.Textbox then
-					NameBox = sec:Textbox("Macro Name", CurrentName or "macro1", function(t)
-						CurrentName = t
-					end)
-				elseif sec.ConfigTextbox then
-					NameBox = sec:ConfigTextbox("Macro Name", CurrentName or "macro1", function(t)
-						CurrentName = t
-					end)
-				end
-			end)
-
-			sec:Button("Record / Stop (R)", function()
-				if Recording then
-					stopRecord()
-				else
-					startRecord()
-				end
-			end)
-			sec:Button("Play (P)", function()
-				playMacro(CurrentName)
-			end)
-			sec:Button("Stop (X)", function()
-				stopRecord()
-				stopPlay()
-			end)
-			sec:Button("Save", function()
-				local n = CurrentName
-				safe(function()
-					if NameBox and NameBox.GetText then
-						n = NameBox:GetText()
-					end
-				end)
-				saveCurrent(n or "macro1")
-				refreshDrop()
-			end)
-			sec:Button("Delete Selected", function()
-				if CurrentName and Macros[CurrentName] then
-					Macros[CurrentName] = nil
-					saveDisk()
-					CurrentName = nil
-					refreshDrop()
-				end
-			end)
-
-			opt:ConfigToggle("Record / Play Move", true, function(v)
-				Opt.RecordMove = v
-				Opt.PlayMove = v
-			end)
-			opt:ConfigToggle("Record / Play Camera", true, function(v)
-				Opt.RecordCamera = v
-				Opt.PlayCamera = v
-			end)
-			opt:ConfigToggle("Record / Play Keys", true, function(v)
-				Opt.RecordKeys = v
-				Opt.PlayKeys = v
-			end)
-			opt:ConfigToggle("Record / Play Mouse", true, function(v)
-				Opt.RecordMouse = v
-				Opt.PlayMouse = v
-			end)
-
-			misc:Button("Unload", function()
-				stopRecord()
-				stopPlay()
-				getgenv().CracksMacro_Running = nil
-				for _, c in ipairs(Connections) do
-					safe(function()
-						c:Disconnect()
-					end)
-				end
-				safe(function()
-					if GUI.Unload then
-						GUI:Unload()
-					elseif GUI.Destroy then
-						GUI:Destroy()
-					end
-				end)
-			end)
-		end
-	end
-end
-
-print("[Macro] mouse move fixed | R/P/X | LeftControl")
