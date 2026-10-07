@@ -59,6 +59,7 @@ local Opt = {
 local KeyRecord = Enum.KeyCode.R
 local KeyPlay = Enum.KeyCode.P
 local KeyStop = Enum.KeyCode.X
+local KeySave = Enum.KeyCode.F
 
 local MouseBtnMap = {
 	[Enum.UserInputType.MouseButton1] = 0,
@@ -239,17 +240,19 @@ end
 local function saveCurrent(name)
 	name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
 	if name == "" or name == "(none)" then
+		print("[Macro] bad name")
 		return
 	end
 	if #RecordBuf > 0 then
 		Macros[name] = RecordBuf
 	end
 	if not Macros[name] then
+		print("[Macro] nothing to save")
 		return
 	end
 	CurrentName = name
 	saveDisk()
-	print("[Macro] saved", name)
+	print("[Macro] saved", name, #(Macros[name] or {}))
 end
 
 local function playMacro(name)
@@ -380,6 +383,10 @@ Connections[#Connections + 1] = UIS.InputBegan:Connect(function(input, gp)
 		if gp then
 			return
 		end
+		if input.KeyCode == KeySave then
+			saveCurrent(CurrentName or "macro1")
+			return
+		end
 		if input.KeyCode == KeyRecord and not Playing then
 			if Recording then
 				stopRecord()
@@ -463,9 +470,6 @@ Connections[#Connections + 1] = RunService.Heartbeat:Connect(function()
 	end)
 end)
 
--- throttle camera spam: only keep last cam each 0.05s by filtering in push — simple fix: record cam every 3rd heartbeat via counter
--- (kept simple; cam still works)
-
 local function queueSelf()
 	local code = string.format([[
 		getgenv().CracksMacro_Running = nil
@@ -497,10 +501,9 @@ end)
 
 pcall(loadDisk)
 
--- UI with retries (fixes "UI doesn't load")
 local function loadUI()
 	local src
-	for i = 1, 3 do
+	for _ = 1, 3 do
 		src = safe(function()
 			return game:HttpGet(LIB_URL, true)
 		end)
@@ -510,7 +513,7 @@ local function loadUI()
 		task.wait(0.4)
 	end
 	if type(src) ~= "string" then
-		warn("[Macro] lib download failed — hotkeys still work R/P/X")
+		warn("[Macro] lib failed — hotkeys still work")
 		return
 	end
 
@@ -518,7 +521,7 @@ local function loadUI()
 		return loadstring(src)()
 	end)
 	if type(Lib) ~= "table" or type(Lib.Init) ~= "function" then
-		warn("[Macro] lib init missing")
+		warn("[Macro] bad lib")
 		return
 	end
 
@@ -599,7 +602,7 @@ local function loadUI()
 		stopRecord()
 		stopPlay()
 	end)
-	sec:Button("Save", function()
+	sec:Button("Save (F)", function()
 		saveCurrent(CurrentName or "macro1")
 	end)
 	sec:Button("Delete", function()
@@ -630,7 +633,7 @@ local function loadUI()
 		cleanup()
 	end)
 
-	print("[Macro] UI loaded — LeftControl")
+	print("[Macro] UI ok — LeftControl")
 end
 
 task.defer(function()
@@ -641,7 +644,7 @@ task.defer(function()
 	end
 end)
 
-print("[Macro] core ready | R record P play X stop")
+print("[Macro] ready | R rec | P play | X stop | F save")
 
 end)
 
