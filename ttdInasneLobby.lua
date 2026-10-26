@@ -1,4 +1,4 @@
--- Collect every object named "CameramanHQ" under workspace.Lifts
+
 local ourplayer = game:GetService("Players").LocalPlayer
 local options = {}
 
@@ -76,8 +76,7 @@ function ClickStart()
 		warn("[DEBUG] Start button NOT found")
 		return
 	end
-
-	-- Get real screen position
+	
 	local inset = GuiService:GetGuiInset()
 	local absPos = startButton.AbsolutePosition
 	local absSize = startButton.AbsoluteSize
@@ -88,7 +87,7 @@ function ClickStart()
 	print("[DEBUG] Clicking at:", centerX, centerY)
 
 	for i = 1, 15 do
-		-- Move mouse to button center
+
 		Vim:SendMouseMoveEvent(centerX, centerY, game)
 		task.wait(0.02)
 
