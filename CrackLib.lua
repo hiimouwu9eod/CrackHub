@@ -1,25 +1,5 @@
 --[[
-	CrackLib v3
-	Fixed dropdowns · clean tweens · themes · config save · copy text · key system steps
-
-	local Lib = loadstring(...)()
-	local Window = Lib:Init({
-		Title = "Hub",
-		ToggleKey = Enum.KeyCode.LeftControl,
-		KeySystem = {
-			Enabled = true,
-			Title = "Key System",
-			Subtitle = "Enter key to continue",
-			Note = "Get key from our link",
-			SaveKey = true,
-			Key = { "TESTKEY123" }, -- accepted keys
-			Steps = {
-				{ Name = "Join Discord", Link = "https://discord.gg/example" },
-				{ Name = "Get Key", Link = "https://lootlabs.gg/example" },
-			},
-		},
-		ConfigFolder = "CrackLibConfigs",
-	})
+	CrackLib v3.1 — fixed callbacks + key system
 ]]
 
 local Players = game:GetService("Players")
@@ -33,18 +13,10 @@ local CrackLib = {}
 CrackLib.__index = CrackLib
 
 local ICONS = {
-	Search = "rbxassetid://7734053426",
 	Close = "rbxassetid://7743878857",
 	Min = "rbxassetid://7734057143",
 	Chevron = "rbxassetid://7733717447",
-	Check = "rbxassetid://7733715400",
-	Copy = "rbxassetid://7733717541",
-	Key = "rbxassetid://7733917211",
-	Link = "rbxassetid://7733964715",
-	Settings = "rbxassetid://7734053495",
 	Shadow = "rbxassetid://6014261993",
-	Info = "rbxassetid://7733960981",
-	Warning = "rbxassetid://7733993268",
 }
 
 local Themes = {
@@ -68,73 +40,42 @@ local Themes = {
 		TabIdle = Color3.fromRGB(32, 32, 40),
 	},
 	Purple = {
-		Bg = Color3.fromRGB(24, 20, 32),
-		Top = Color3.fromRGB(34, 28, 44),
-		Sidebar = Color3.fromRGB(20, 16, 28),
-		Element = Color3.fromRGB(40, 32, 52),
-		ElementHover = Color3.fromRGB(52, 42, 68),
-		Accent = Color3.fromRGB(170, 100, 255),
-		AccentDim = Color3.fromRGB(130, 70, 210),
-		Success = Color3.fromRGB(70, 200, 120),
-		Danger = Color3.fromRGB(230, 70, 80),
-		Info = Color3.fromRGB(100, 140, 255),
-		Warning = Color3.fromRGB(230, 175, 55),
-		Text = Color3.fromRGB(245, 245, 250),
-		TextDim = Color3.fromRGB(150, 140, 170),
-		Stroke = Color3.fromRGB(55, 45, 70),
-		Track = Color3.fromRGB(50, 42, 62),
-		Input = Color3.fromRGB(30, 24, 40),
-		TabIdle = Color3.fromRGB(36, 28, 48),
+		Bg = Color3.fromRGB(24, 20, 32), Top = Color3.fromRGB(34, 28, 44), Sidebar = Color3.fromRGB(20, 16, 28),
+		Element = Color3.fromRGB(40, 32, 52), ElementHover = Color3.fromRGB(52, 42, 68),
+		Accent = Color3.fromRGB(170, 100, 255), AccentDim = Color3.fromRGB(130, 70, 210),
+		Success = Color3.fromRGB(70, 200, 120), Danger = Color3.fromRGB(230, 70, 80),
+		Info = Color3.fromRGB(100, 140, 255), Warning = Color3.fromRGB(230, 175, 55),
+		Text = Color3.fromRGB(245, 245, 250), TextDim = Color3.fromRGB(150, 140, 170),
+		Stroke = Color3.fromRGB(55, 45, 70), Track = Color3.fromRGB(50, 42, 62),
+		Input = Color3.fromRGB(30, 24, 40), TabIdle = Color3.fromRGB(36, 28, 48),
 	},
 	Green = {
-		Bg = Color3.fromRGB(18, 24, 20),
-		Top = Color3.fromRGB(26, 34, 28),
-		Sidebar = Color3.fromRGB(14, 20, 16),
-		Element = Color3.fromRGB(30, 40, 34),
-		ElementHover = Color3.fromRGB(40, 52, 44),
-		Accent = Color3.fromRGB(80, 220, 140),
-		AccentDim = Color3.fromRGB(50, 170, 100),
-		Success = Color3.fromRGB(80, 220, 140),
-		Danger = Color3.fromRGB(230, 70, 80),
-		Info = Color3.fromRGB(50, 160, 200),
-		Warning = Color3.fromRGB(230, 175, 55),
-		Text = Color3.fromRGB(245, 245, 250),
-		TextDim = Color3.fromRGB(140, 155, 145),
-		Stroke = Color3.fromRGB(40, 55, 45),
-		Track = Color3.fromRGB(40, 50, 44),
-		Input = Color3.fromRGB(22, 30, 26),
-		TabIdle = Color3.fromRGB(28, 36, 30),
+		Bg = Color3.fromRGB(18, 24, 20), Top = Color3.fromRGB(26, 34, 28), Sidebar = Color3.fromRGB(14, 20, 16),
+		Element = Color3.fromRGB(30, 40, 34), ElementHover = Color3.fromRGB(40, 52, 44),
+		Accent = Color3.fromRGB(80, 220, 140), AccentDim = Color3.fromRGB(50, 170, 100),
+		Success = Color3.fromRGB(80, 220, 140), Danger = Color3.fromRGB(230, 70, 80),
+		Info = Color3.fromRGB(50, 160, 200), Warning = Color3.fromRGB(230, 175, 55),
+		Text = Color3.fromRGB(245, 245, 250), TextDim = Color3.fromRGB(140, 155, 145),
+		Stroke = Color3.fromRGB(40, 55, 45), Track = Color3.fromRGB(40, 50, 44),
+		Input = Color3.fromRGB(22, 30, 26), TabIdle = Color3.fromRGB(28, 36, 30),
 	},
 	Red = {
-		Bg = Color3.fromRGB(26, 18, 20),
-		Top = Color3.fromRGB(36, 24, 26),
-		Sidebar = Color3.fromRGB(20, 14, 16),
-		Element = Color3.fromRGB(42, 30, 32),
-		ElementHover = Color3.fromRGB(55, 38, 40),
-		Accent = Color3.fromRGB(240, 80, 90),
-		AccentDim = Color3.fromRGB(190, 50, 60),
-		Success = Color3.fromRGB(70, 200, 120),
-		Danger = Color3.fromRGB(240, 80, 90),
-		Info = Color3.fromRGB(50, 155, 210),
-		Warning = Color3.fromRGB(230, 175, 55),
-		Text = Color3.fromRGB(245, 245, 250),
-		TextDim = Color3.fromRGB(160, 140, 145),
-		Stroke = Color3.fromRGB(60, 40, 42),
-		Track = Color3.fromRGB(50, 36, 38),
-		Input = Color3.fromRGB(30, 20, 22),
-		TabIdle = Color3.fromRGB(38, 26, 28),
+		Bg = Color3.fromRGB(26, 18, 20), Top = Color3.fromRGB(36, 24, 26), Sidebar = Color3.fromRGB(20, 14, 16),
+		Element = Color3.fromRGB(42, 30, 32), ElementHover = Color3.fromRGB(55, 38, 40),
+		Accent = Color3.fromRGB(240, 80, 90), AccentDim = Color3.fromRGB(190, 50, 60),
+		Success = Color3.fromRGB(70, 200, 120), Danger = Color3.fromRGB(240, 80, 90),
+		Info = Color3.fromRGB(50, 155, 210), Warning = Color3.fromRGB(230, 175, 55),
+		Text = Color3.fromRGB(245, 245, 250), TextDim = Color3.fromRGB(160, 140, 145),
+		Stroke = Color3.fromRGB(60, 40, 42), Track = Color3.fromRGB(50, 36, 38),
+		Input = Color3.fromRGB(30, 20, 22), TabIdle = Color3.fromRGB(38, 26, 28),
 	},
 }
 
 local Theme = Themes.Dark
 
 local function protect(gui)
-	pcall(function()
-		if syn and syn.protect_gui then syn.protect_gui(gui) end
-	end)
-	local ok = pcall(function()
-		if gethui then gui.Parent = gethui() end
-	end)
+	pcall(function() if syn and syn.protect_gui then syn.protect_gui(gui) end end)
+	local ok = pcall(function() if gethui then gui.Parent = gethui() end end)
 	if not ok or not gui.Parent then pcall(function() gui.Parent = CoreGui end) end
 	if not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 end
@@ -161,12 +102,13 @@ local function stroke(p, col, th)
 	return s
 end
 
-local function pad(p, t, b, l, r)
+local function pad(p, n)
 	local x = Instance.new("UIPadding")
-	x.PaddingTop = UDim.new(0, t or 10)
-	x.PaddingBottom = UDim.new(0, b or t or 10)
-	x.PaddingLeft = UDim.new(0, l or t or 10)
-	x.PaddingRight = UDim.new(0, r or l or t or 10)
+	n = n or 10
+	x.PaddingTop = UDim.new(0, n)
+	x.PaddingBottom = UDim.new(0, n)
+	x.PaddingLeft = UDim.new(0, n)
+	x.PaddingRight = UDim.new(0, n)
 	x.Parent = p
 	return x
 end
@@ -192,596 +134,543 @@ end
 
 local function copyText(str)
 	str = tostring(str or "")
-	local ok = pcall(function()
+	return pcall(function()
 		if setclipboard then setclipboard(str)
 		elseif toclipboard then toclipboard(str)
-		elseif Clipboard and Clipboard.set then Clipboard.set(str)
 		else error("no clipboard") end
 	end)
-	return ok
 end
 
-local function isfile_(p)
-	local ok, r = pcall(function() return isfile and isfile(p) end)
-	return ok and r
+local function safeCall(fn, ...)
+	if type(fn) ~= "function" then return end
+	local args = table.pack(...)
+	task.spawn(function()
+		local ok, err = pcall(function()
+			fn(table.unpack(args, 1, args.n))
+		end)
+		if not ok then
+			warn("[CrackLib] callback error:", err)
+		end
+	end)
 end
 
-local function readfile_(p)
-	local ok, r = pcall(function() return readfile(p) end)
+local function writefile_(path, data)
+	return pcall(function()
+		if makefolder then
+			local folder = path:match("^(.*)/[^/]+$")
+			if folder then pcall(makefolder, folder) end
+		end
+		writefile(path, data)
+	end)
+end
+
+local function readfile_(path)
+	local ok, r = pcall(function() return readfile(path) end)
 	return ok and r or nil
 end
 
-local function writefile_(p, d)
-	return pcall(function()
-		if makefolder then
-			local folder = p:match("^(.*)/[^/]+$")
-			if folder then pcall(makefolder, folder) end
-		end
-		writefile(p, d)
-	end)
-end
-
--- ===================== KEY SYSTEM UI =====================
-local function showKeySystem(opts, onSuccess)
-	local ks = opts.KeySystem
-	if not ks or not ks.Enabled then
-		onSuccess()
-		return
-	end
-
-	-- saved key?
-	if ks.SaveKey then
-		local path = (opts.ConfigFolder or "CrackLibConfigs") .. "/key.txt"
-		local saved = readfile_(path)
-		if saved then
-			saved = saved:gsub("%s+", "")
-			for _, k in ipairs(ks.Key or {}) do
-				if saved == tostring(k) then
-					onSuccess()
-					return
-				end
-			end
-		end
-	end
-
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "CrackLibKey"
-	gui.IgnoreGuiInset = true
-	gui.ResetOnSpawn = false
-	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	protect(gui)
-
-	local bg = Instance.new("Frame")
-	bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	bg.BackgroundTransparency = 0.45
-	bg.Size = UDim2.fromScale(1, 1)
-	bg.BorderSizePixel = 0
-	bg.Parent = gui
-
-	local card = Instance.new("Frame")
-	card.AnchorPoint = Vector2.new(0.5, 0.5)
-	card.Position = UDim2.fromScale(0.5, 0.5)
-	card.Size = UDim2.fromOffset(0, 0)
-	card.BackgroundColor3 = Theme.Bg
-	card.BorderSizePixel = 0
-	card.ClipsDescendants = true
-	card.Parent = gui
-	corner(card, 14)
-	stroke(card, Theme.Stroke, 1)
-	tw(card, { Size = UDim2.fromOffset(420, 380) }, 0.3, Enum.EasingStyle.Back)
-
-	local title = Instance.new("TextLabel")
-	title.BackgroundTransparency = 1
-	title.Position = UDim2.fromOffset(20, 16)
-	title.Size = UDim2.new(1, -40, 0, 28)
-	title.Font = Enum.Font.GothamBold
-	title.Text = ks.Title or "Key System"
-	title.TextColor3 = Theme.Text
-	title.TextSize = 20
-	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Parent = card
-
-	local sub = Instance.new("TextLabel")
-	sub.BackgroundTransparency = 1
-	sub.Position = UDim2.fromOffset(20, 46)
-	sub.Size = UDim2.new(1, -40, 0, 18)
-	sub.Font = Enum.Font.Gotham
-	sub.Text = ks.Subtitle or "Complete steps & enter key"
-	sub.TextColor3 = Theme.TextDim
-	sub.TextSize = 13
-	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Parent = card
-
-	-- steps
-	local stepsFrame = Instance.new("ScrollingFrame")
-	stepsFrame.BackgroundTransparency = 1
-	stepsFrame.Position = UDim2.fromOffset(16, 78)
-	stepsFrame.Size = UDim2.new(1, -32, 0, 140)
-	stepsFrame.ScrollBarThickness = 3
-	stepsFrame.ScrollBarImageColor3 = Theme.Accent
-	stepsFrame.BorderSizePixel = 0
-	stepsFrame.CanvasSize = UDim2.new()
-	stepsFrame.Parent = card
-	local sList = vlist(stepsFrame, 8)
-	autoCanvas(stepsFrame, sList)
-
-	for i, step in ipairs(ks.Steps or {}) do
-		local row = Instance.new("Frame")
-		row.BackgroundColor3 = Theme.Element
-		row.BorderSizePixel = 0
-		row.Size = UDim2.new(1, 0, 0, 40)
-		row.Parent = stepsFrame
-		corner(row, 8)
-
-		local num = Instance.new("TextLabel")
-		num.BackgroundColor3 = Theme.Accent
-		num.Size = UDim2.fromOffset(24, 24)
-		num.Position = UDim2.fromOffset(8, 8)
-		num.Font = Enum.Font.GothamBold
-		num.Text = tostring(i)
-		num.TextColor3 = Theme.Text
-		num.TextSize = 12
-		num.Parent = row
-		corner(num, 6)
-
-		local name = Instance.new("TextLabel")
-		name.BackgroundTransparency = 1
-		name.Position = UDim2.fromOffset(40, 0)
-		name.Size = UDim2.new(1, -120, 1, 0)
-		name.Font = Enum.Font.GothamMedium
-		name.Text = step.Name or ("Step " .. i)
-		name.TextColor3 = Theme.Text
-		name.TextSize = 13
-		name.TextXAlignment = Enum.TextXAlignment.Left
-		name.Parent = row
-
-		if step.Link then
-			local openBtn = Instance.new("TextButton")
-			openBtn.AnchorPoint = Vector2.new(1, 0.5)
-			openBtn.Position = UDim2.new(1, -8, 0.5, 0)
-			openBtn.Size = UDim2.fromOffset(70, 26)
-			openBtn.BackgroundColor3 = Theme.Accent
-			openBtn.BorderSizePixel = 0
-			openBtn.Font = Enum.Font.GothamBold
-			openBtn.Text = "Open"
-			openBtn.TextColor3 = Theme.Text
-			openBtn.TextSize = 12
-			openBtn.AutoButtonColor = false
-			openBtn.Parent = row
-			corner(openBtn, 6)
-			openBtn.MouseButton1Click:Connect(function()
-				copyText(step.Link)
-				pcall(function()
-					if setclipboard then setclipboard(step.Link) end
-				end)
-				-- try open
-				pcall(function()
-					local req = (syn and syn.request) or http_request or request
-					if typeof(req) == "function" then
-						-- can't open browser easily; copy is enough
-					end
-				end)
-				openBtn.Text = "Copied"
-				task.delay(1.2, function()
-					if openBtn.Parent then openBtn.Text = "Open" end
-				end)
-			end)
-		end
-	end
-
-	local note = Instance.new("TextLabel")
-	note.BackgroundTransparency = 1
-	note.Position = UDim2.fromOffset(20, 228)
-	note.Size = UDim2.new(1, -40, 0, 16)
-	note.Font = Enum.Font.Gotham
-	note.Text = ks.Note or ""
-	note.TextColor3 = Theme.TextDim
-	note.TextSize = 12
-	note.TextXAlignment = Enum.TextXAlignment.Left
-	note.Parent = card
-
-	local box = Instance.new("TextBox")
-	box.BackgroundColor3 = Theme.Input
-	box.BorderSizePixel = 0
-	box.Position = UDim2.fromOffset(20, 256)
-	box.Size = UDim2.new(1, -40, 0, 36)
-	box.Font = Enum.Font.Gotham
-	box.PlaceholderText = "Enter key..."
-	box.PlaceholderColor3 = Theme.TextDim
-	box.Text = ""
-	box.TextColor3 = Theme.Text
-	box.TextSize = 14
-	box.ClearTextOnFocus = false
-	box.Parent = card
-	corner(box, 8)
-	stroke(box, Theme.Stroke, 1)
-
-	local status = Instance.new("TextLabel")
-	status.BackgroundTransparency = 1
-	status.Position = UDim2.fromOffset(20, 298)
-	status.Size = UDim2.new(1, -40, 0, 16)
-	status.Font = Enum.Font.Gotham
-	status.Text = ""
-	status.TextColor3 = Theme.Danger
-	status.TextSize = 12
-	status.TextXAlignment = Enum.TextXAlignment.Left
-	status.Parent = card
-
-	local submit = Instance.new("TextButton")
-	submit.Position = UDim2.fromOffset(20, 322)
-	submit.Size = UDim2.new(1, -40, 0, 40)
-	submit.BackgroundColor3 = Theme.Accent
-	submit.BorderSizePixel = 0
-	submit.Font = Enum.Font.GothamBold
-	submit.Text = "Submit Key"
-	submit.TextColor3 = Theme.Text
-	submit.TextSize = 15
-	submit.AutoButtonColor = false
-	submit.Parent = card
-	corner(submit, 8)
-
-	local function tryKey()
-		local entered = (box.Text or ""):gsub("%s+", "")
-		local ok = false
-		for _, k in ipairs(ks.Key or {}) do
-			if entered == tostring(k) then ok = true break end
-		end
-		if ok then
-			status.TextColor3 = Theme.Success
-			status.Text = "Key accepted"
-			if ks.SaveKey then
-				writefile_((opts.ConfigFolder or "CrackLibConfigs") .. "/key.txt", entered)
-			end
-			tw(card, { Size = UDim2.fromOffset(0, 0) }, 0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In)
-			task.delay(0.22, function()
-				gui:Destroy()
-				onSuccess()
-			end)
-		else
-			status.TextColor3 = Theme.Danger
-			status.Text = "Invalid key"
-			tw(card, { Position = UDim2.new(0.5, 6, 0.5, 0) }, 0.05)
-			task.delay(0.05, function()
-				tw(card, { Position = UDim2.new(0.5, -6, 0.5, 0) }, 0.05)
-				task.delay(0.05, function()
-					tw(card, { Position = UDim2.fromScale(0.5, 0.5) }, 0.08)
-				end)
-			end)
-		end
-	end
-
-	submit.MouseButton1Click:Connect(tryKey)
-	box.FocusLost:Connect(function(enter)
-		if enter then tryKey() end
-	end)
-end
-
 -- ===================== INIT =====================
-function CrackLib:Init(opts)
-	if type(opts) == "string" then
-		opts = { Title = opts, ToggleKey = Enum.KeyCode.LeftControl }
+function CrackLib.Init(_, a, b, c)
+	-- support: Init({...})  OR  Init("Title", draggable, toggleKey)
+	local opts
+	if type(a) == "table" then
+		opts = a
+	else
+		opts = {
+			Title = tostring(a or "CrackLib"),
+			Draggable = b ~= false,
+			ToggleKey = c or Enum.KeyCode.LeftControl,
+		}
 	end
-	opts = opts or {}
+
 	local title = opts.Title or "CrackLib"
 	local toggleKey = opts.ToggleKey or Enum.KeyCode.LeftControl
 	local configFolder = opts.ConfigFolder or "CrackLibConfigs"
 	local themeName = opts.Theme or "Dark"
 	Theme = Themes[themeName] or Themes.Dark
 
-	local ready = Instance.new("BindableEvent")
-	local window
+	local self = setmetatable({}, CrackLib)
+	self._connections = {}
+	self._tabs = {}
+	self._flags = {}
+	self._flagSetters = {}
+	self._visible = true
+	self._minimized = false
+	self._unlocked = true
+	self.ToggleKey = toggleKey
+	self.ConfigFolder = configFolder
+	self.ConfigName = "default"
 
-	local function build()
-		local self = setmetatable({}, CrackLib)
-		self._connections = {}
-		self._tabs = {}
-		self._flags = {}
-		self._visible = true
-		self._minimized = false
-		self.ToggleKey = toggleKey
-		self.ConfigFolder = configFolder
-		self.ConfigName = "default"
-		self._themeName = themeName
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "CrackLib"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	protect(gui)
+	self.Gui = gui
 
-		local gui = Instance.new("ScreenGui")
-		gui.Name = "CrackLib"
-		gui.ResetOnSpawn = false
-		gui.IgnoreGuiInset = true
-		gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-		protect(gui)
-		self.Gui = gui
+	local Main = Instance.new("Frame")
+	Main.Name = "Main"
+	Main.BackgroundColor3 = Theme.Bg
+	Main.BorderSizePixel = 0
+	Main.AnchorPoint = Vector2.new(0.5, 0.5)
+	Main.Position = UDim2.fromScale(0.5, 0.5)
+	Main.Size = UDim2.fromOffset(0, 0)
+	Main.ClipsDescendants = true
+	Main.Parent = gui
+	corner(Main, 12)
+	stroke(Main, Theme.Stroke, 1)
+	self.Main = Main
+	tw(Main, { Size = UDim2.fromOffset(700, 480) }, 0.3, Enum.EasingStyle.Back)
 
-		local Main = Instance.new("Frame")
-		Main.Name = "Main"
-		Main.BackgroundColor3 = Theme.Bg
-		Main.BorderSizePixel = 0
-		Main.AnchorPoint = Vector2.new(0.5, 0.5)
-		Main.Position = UDim2.fromScale(0.5, 0.5)
-		Main.Size = UDim2.fromOffset(0, 0)
-		Main.ClipsDescendants = true
-		Main.Parent = gui
-		corner(Main, 12)
-		stroke(Main, Theme.Stroke, 1)
-		self.Main = Main
-		tw(Main, { Size = UDim2.fromOffset(700, 480) }, 0.32, Enum.EasingStyle.Back)
+	local sh = Instance.new("ImageLabel")
+	sh.AnchorPoint = Vector2.new(0.5, 0.5)
+	sh.BackgroundTransparency = 1
+	sh.Position = UDim2.fromScale(0.5, 0.5)
+	sh.Size = UDim2.new(1.1, 0, 1.14, 0)
+	sh.ZIndex = 0
+	sh.Image = ICONS.Shadow
+	sh.ImageColor3 = Color3.new(0, 0, 0)
+	sh.ImageTransparency = 0.5
+	sh.ScaleType = Enum.ScaleType.Slice
+	sh.SliceCenter = Rect.new(49, 49, 450, 450)
+	sh.Parent = Main
 
-		local sh = Instance.new("ImageLabel")
-		sh.AnchorPoint = Vector2.new(0.5, 0.5)
-		sh.BackgroundTransparency = 1
-		sh.Position = UDim2.fromScale(0.5, 0.5)
-		sh.Size = UDim2.new(1.1, 0, 1.14, 0)
-		sh.ZIndex = 0
-		sh.Image = ICONS.Shadow
-		sh.ImageColor3 = Color3.new(0, 0, 0)
-		sh.ImageTransparency = 0.5
-		sh.ScaleType = Enum.ScaleType.Slice
-		sh.SliceCenter = Rect.new(49, 49, 450, 450)
-		sh.Parent = Main
+	local Top = Instance.new("Frame")
+	Top.BackgroundColor3 = Theme.Top
+	Top.BorderSizePixel = 0
+	Top.Size = UDim2.new(1, 0, 0, 50)
+	Top.Parent = Main
 
-		-- Top
-		local Top = Instance.new("Frame")
-		Top.BackgroundColor3 = Theme.Top
-		Top.BorderSizePixel = 0
-		Top.Size = UDim2.new(1, 0, 0, 50)
-		Top.Parent = Main
-		self.Top = Top
+	local accent = Instance.new("Frame")
+	accent.BackgroundColor3 = Theme.Accent
+	accent.BorderSizePixel = 0
+	accent.Position = UDim2.new(0, 0, 1, -2)
+	accent.Size = UDim2.new(1, 0, 0, 2)
+	accent.Parent = Top
 
-		local accent = Instance.new("Frame")
-		accent.BackgroundColor3 = Theme.Accent
-		accent.BorderSizePixel = 0
-		accent.Position = UDim2.new(0, 0, 1, -2)
-		accent.Size = UDim2.new(1, 0, 0, 2)
-		accent.Parent = Top
+	local Title = Instance.new("TextLabel")
+	Title.BackgroundTransparency = 1
+	Title.Position = UDim2.fromOffset(16, 0)
+	Title.Size = UDim2.new(0, 200, 1, 0)
+	Title.Font = Enum.Font.GothamBold
+	Title.Text = title
+	Title.TextColor3 = Theme.Text
+	Title.TextSize = 17
+	Title.TextXAlignment = Enum.TextXAlignment.Left
+	Title.Parent = Top
 
-		local Title = Instance.new("TextLabel")
-		Title.BackgroundTransparency = 1
-		Title.Position = UDim2.fromOffset(16, 0)
-		Title.Size = UDim2.new(0, 180, 1, 0)
-		Title.Font = Enum.Font.GothamBold
-		Title.Text = title
-		Title.TextColor3 = Theme.Text
-		Title.TextSize = 17
-		Title.TextXAlignment = Enum.TextXAlignment.Left
-		Title.Parent = Top
+	local searchWrap = Instance.new("Frame")
+	searchWrap.BackgroundColor3 = Theme.Input
+	searchWrap.BorderSizePixel = 0
+	searchWrap.Position = UDim2.new(0, 210, 0.5, -14)
+	searchWrap.Size = UDim2.fromOffset(250, 28)
+	searchWrap.Parent = Top
+	corner(searchWrap, 7)
+	stroke(searchWrap, Theme.Stroke, 1)
 
-		local searchWrap = Instance.new("Frame")
-		searchWrap.BackgroundColor3 = Theme.Input
-		searchWrap.BorderSizePixel = 0
-		searchWrap.Position = UDim2.new(0, 200, 0.5, -14)
-		searchWrap.Size = UDim2.fromOffset(260, 28)
-		searchWrap.Parent = Top
-		corner(searchWrap, 7)
-		stroke(searchWrap, Theme.Stroke, 1)
+	local SearchBox = Instance.new("TextBox")
+	SearchBox.BackgroundTransparency = 1
+	SearchBox.Position = UDim2.fromOffset(10, 0)
+	SearchBox.Size = UDim2.new(1, -16, 1, 0)
+	SearchBox.Font = Enum.Font.Gotham
+	SearchBox.PlaceholderText = "Search..."
+	SearchBox.PlaceholderColor3 = Theme.TextDim
+	SearchBox.Text = ""
+	SearchBox.TextColor3 = Theme.Text
+	SearchBox.TextSize = 13
+	SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+	SearchBox.ClearTextOnFocus = false
+	SearchBox.Parent = searchWrap
 
-		local SearchBox = Instance.new("TextBox")
-		SearchBox.BackgroundTransparency = 1
-		SearchBox.Position = UDim2.fromOffset(10, 0)
-		SearchBox.Size = UDim2.new(1, -16, 1, 0)
-		SearchBox.Font = Enum.Font.Gotham
-		SearchBox.PlaceholderText = "Search..."
-		SearchBox.PlaceholderColor3 = Theme.TextDim
-		SearchBox.Text = ""
-		SearchBox.TextColor3 = Theme.Text
-		SearchBox.TextSize = 13
-		SearchBox.TextXAlignment = Enum.TextXAlignment.Left
-		SearchBox.ClearTextOnFocus = false
-		SearchBox.Parent = searchWrap
+	local function iconBtn(x, img, col)
+		local b = Instance.new("ImageButton")
+		b.BackgroundTransparency = 1
+		b.Position = UDim2.new(1, x, 0.5, -10)
+		b.Size = UDim2.fromOffset(20, 20)
+		b.Image = img
+		b.ImageColor3 = Theme.TextDim
+		b.Parent = Top
+		b.MouseEnter:Connect(function() tw(b, { ImageColor3 = col or Theme.Text }, 0.1) end)
+		b.MouseLeave:Connect(function() tw(b, { ImageColor3 = Theme.TextDim }, 0.1) end)
+		return b
+	end
 
-		local function iconBtn(x, img, col)
-			local b = Instance.new("ImageButton")
-			b.BackgroundTransparency = 1
-			b.Position = UDim2.new(1, x, 0.5, -10)
-			b.Size = UDim2.fromOffset(20, 20)
-			b.Image = img
-			b.ImageColor3 = Theme.TextDim
-			b.Parent = Top
-			b.MouseEnter:Connect(function() tw(b, { ImageColor3 = col or Theme.Text }, 0.1) end)
-			b.MouseLeave:Connect(function() tw(b, { ImageColor3 = Theme.TextDim }, 0.1) end)
-			return b
+	local ExitBtn = iconBtn(-32, ICONS.Close, Theme.Danger)
+	local MinBtn = iconBtn(-60, ICONS.Min, Theme.Accent)
+
+	local Sidebar = Instance.new("Frame")
+	Sidebar.BackgroundColor3 = Theme.Sidebar
+	Sidebar.BorderSizePixel = 0
+	Sidebar.Position = UDim2.fromOffset(0, 50)
+	Sidebar.Size = UDim2.new(0, 150, 1, -50)
+	Sidebar.Parent = Main
+
+	local TabScroll = Instance.new("ScrollingFrame")
+	TabScroll.BackgroundTransparency = 1
+	TabScroll.BorderSizePixel = 0
+	TabScroll.Size = UDim2.fromScale(1, 1)
+	TabScroll.ScrollBarThickness = 2
+	TabScroll.ScrollBarImageColor3 = Theme.Accent
+	TabScroll.CanvasSize = UDim2.new()
+	TabScroll.Parent = Sidebar
+	local tabLay = vlist(TabScroll, 5)
+	pad(TabScroll, 10)
+	autoCanvas(TabScroll, tabLay)
+	self.TabScroll = TabScroll
+
+	local Content = Instance.new("Frame")
+	Content.BackgroundTransparency = 1
+	Content.Position = UDim2.fromOffset(150, 50)
+	Content.Size = UDim2.new(1, -150, 1, -50)
+	Content.ClipsDescendants = true
+	Content.Parent = Main
+	self.Content = Content
+
+	local TabsFolder = Instance.new("Folder")
+	TabsFolder.Parent = Content
+	self.TabsFolder = TabsFolder
+
+	-- drag
+	local dragging, dragStart, startPos
+	Top.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = i.Position
+			startPos = Main.Position
 		end
+	end)
+	table.insert(self._connections, UIS.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end))
+	table.insert(self._connections, UIS.InputChanged:Connect(function(i)
+		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+			local d = i.Position - dragStart
+			Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+		end
+	end))
 
-		local ExitBtn = iconBtn(-32, ICONS.Close, Theme.Danger)
-		local MinBtn = iconBtn(-60, ICONS.Min, Theme.Accent)
+	ExitBtn.MouseButton1Click:Connect(function()
+		tw(Main, { Size = UDim2.fromOffset(0, 0) }, 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+		task.delay(0.18, function() self:Unload() end)
+	end)
 
-		-- Sidebar
-		local Sidebar = Instance.new("Frame")
-		Sidebar.BackgroundColor3 = Theme.Sidebar
-		Sidebar.BorderSizePixel = 0
-		Sidebar.Position = UDim2.fromOffset(0, 50)
-		Sidebar.Size = UDim2.new(0, 150, 1, -50)
-		Sidebar.Parent = Main
+	MinBtn.MouseButton1Click:Connect(function()
+		self._minimized = not self._minimized
+		if self._minimized then
+			tw(Main, { Size = UDim2.fromOffset(700, 50) }, 0.2)
+			Sidebar.Visible = false
+			Content.Visible = false
+		else
+			Sidebar.Visible = true
+			Content.Visible = true
+			tw(Main, { Size = UDim2.fromOffset(700, 480) }, 0.25, Enum.EasingStyle.Back)
+		end
+	end)
 
-		local TabScroll = Instance.new("ScrollingFrame")
-		TabScroll.BackgroundTransparency = 1
-		TabScroll.BorderSizePixel = 0
-		TabScroll.Size = UDim2.fromScale(1, 1)
-		TabScroll.ScrollBarThickness = 2
-		TabScroll.ScrollBarImageColor3 = Theme.Accent
-		TabScroll.CanvasSize = UDim2.new()
-		TabScroll.Parent = Sidebar
-		local tabLay = vlist(TabScroll, 5)
-		pad(TabScroll, 10)
-		autoCanvas(TabScroll, tabLay)
-		self.TabScroll = TabScroll
+	table.insert(self._connections, UIS.InputBegan:Connect(function(input, gp)
+		if gp then return end
+		if input.KeyCode == self.ToggleKey then
+			self._visible = not self._visible
+			Main.Visible = self._visible
+		end
+	end))
 
-		local Content = Instance.new("Frame")
-		Content.BackgroundTransparency = 1
-		Content.Position = UDim2.fromOffset(150, 50)
-		Content.Size = UDim2.new(1, -150, 1, -50)
-		Content.ClipsDescendants = true
-		Content.Parent = Main
-		self.Content = Content
-
-		local TabsFolder = Instance.new("Folder")
-		TabsFolder.Parent = Content
-		self.TabsFolder = TabsFolder
-
-		-- drag (smooth)
-		local dragging, dragStart, startPos
-		Top.InputBegan:Connect(function(i)
-			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-				dragging = true
-				dragStart = i.Position
-				startPos = Main.Position
-			end
-		end)
-		table.insert(self._connections, UIS.InputEnded:Connect(function(i)
-			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-				dragging = false
-			end
-		end))
-		table.insert(self._connections, UIS.InputChanged:Connect(function(i)
-			if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-				local d = i.Position - dragStart
-				Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
-			end
-		end))
-
-		ExitBtn.MouseButton1Click:Connect(function()
-			tw(Main, { Size = UDim2.fromOffset(0, 0) }, 0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-			task.delay(0.2, function() self:Unload() end)
-		end)
-
-		MinBtn.MouseButton1Click:Connect(function()
-			self._minimized = not self._minimized
-			if self._minimized then
-				tw(Main, { Size = UDim2.fromOffset(700, 50) }, 0.22)
-				Sidebar.Visible = false
-				Content.Visible = false
-			else
-				Sidebar.Visible = true
-				Content.Visible = true
-				tw(Main, { Size = UDim2.fromOffset(700, 480) }, 0.28, Enum.EasingStyle.Back)
-			end
-		end)
-
-		table.insert(self._connections, UIS.InputBegan:Connect(function(input, gp)
-			if gp then return end
-			if input.KeyCode == self.ToggleKey then
-				self._visible = not self._visible
-				if self._visible then
-					Main.Visible = true
-					Main.Size = UDim2.fromOffset(0, 0)
-					tw(Main, { Size = UDim2.fromOffset(700, 480) }, 0.28, Enum.EasingStyle.Back)
-				else
-					tw(Main, { Size = UDim2.fromOffset(0, 0) }, 0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-					task.delay(0.2, function()
-						if not self._visible then
-							Main.Visible = false
-							Main.Size = UDim2.fromOffset(700, 480)
-						end
-					end)
-				end
-			end
-		end))
-
-		SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-			local q = string.lower(SearchBox.Text)
-			for _, tab in pairs(self._tabs) do
-				if tab.Page then
-					for _, child in ipairs(tab.Page:GetDescendants()) do
-						if child:IsA("Frame") and child:GetAttribute("IsElement") then
-							local lab = child:FindFirstChild("TitleText")
-							if lab then
-								child.Visible = q == "" or string.find(string.lower(lab.Text), q, 1, true) ~= nil
-							end
+	SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+		local q = string.lower(SearchBox.Text)
+		for _, tab in pairs(self._tabs) do
+			if tab.Page then
+				for _, child in ipairs(tab.Page:GetDescendants()) do
+					if child:IsA("Frame") and child:GetAttribute("IsElement") then
+						local lab = child:FindFirstChild("TitleText")
+						if lab then
+							child.Visible = q == "" or string.find(string.lower(lab.Text), q, 1, true) ~= nil
 						end
 					end
 				end
 			end
+		end
+	end)
+
+	function self:SetFlag(n, v) self._flags[n] = v end
+	function self:GetFlag(n) return self._flags[n] end
+	function self:BindFlag(n, setter) self._flagSetters[n] = setter end
+
+	function self:SaveConfig(name)
+		name = name or self.ConfigName or "default"
+		return writefile_(self.ConfigFolder .. "/" .. name .. ".json", HttpService:JSONEncode(self._flags))
+	end
+
+	function self:LoadConfig(name)
+		name = name or self.ConfigName or "default"
+		local raw = readfile_(self.ConfigFolder .. "/" .. name .. ".json")
+		if not raw then return false end
+		local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
+		if not ok or type(data) ~= "table" then return false end
+		for k, v in pairs(data) do
+			self._flags[k] = v
+			if self._flagSetters[k] then pcall(self._flagSetters[k], v) end
+		end
+		return true
+	end
+
+	function self:CreateTab(n)
+		return CrackLib.CreateTab(self, n)
+	end
+
+	function self:Unload()
+		for _, c in ipairs(self._connections) do pcall(function() c:Disconnect() end) end
+		if self.Gui then self.Gui:Destroy() end
+	end
+
+	function self:SetToggleKey(k) self.ToggleKey = k end
+	function self:SetVisible(v) self._visible = v Main.Visible = v end
+
+	function self:Notify(text, dur)
+		local n = Instance.new("TextLabel")
+		n.BackgroundColor3 = Theme.Element
+		n.BorderSizePixel = 0
+		n.AnchorPoint = Vector2.new(1, 1)
+		n.Position = UDim2.new(1, -16, 1, -16)
+		n.Size = UDim2.fromOffset(260, 40)
+		n.Font = Enum.Font.GothamMedium
+		n.Text = "  " .. tostring(text)
+		n.TextColor3 = Theme.Text
+		n.TextSize = 13
+		n.TextXAlignment = Enum.TextXAlignment.Left
+		n.Parent = gui
+		corner(n, 8)
+		stroke(n, Theme.Accent, 1)
+		task.delay(dur or 2.5, function()
+			if n.Parent then n:Destroy() end
 		end)
+	end
 
-		-- config helpers
-		function self:SetFlag(name, value)
-			self._flags[name] = value
-		end
-		function self:GetFlag(name)
-			return self._flags[name]
+	-- ========== KEY SYSTEM (overlay, always works) ==========
+	local ks = opts.KeySystem
+	if type(ks) == "table" and ks.Enabled == true then
+		self._unlocked = false
+		Main.Visible = false
+
+		local keyPath = configFolder .. "/key.txt"
+		local saved = readfile_(keyPath)
+		local already = false
+		if ks.SaveKey and saved then
+			saved = tostring(saved):gsub("%s+", "")
+			for _, k in ipairs(ks.Key or {}) do
+				if saved == tostring(k) then already = true break end
+			end
 		end
 
-		function self:SaveConfig(name)
-			name = name or self.ConfigName or "default"
-			local path = self.ConfigFolder .. "/" .. name .. ".json"
-			local ok = writefile_(path, HttpService:JSONEncode(self._flags))
-			return ok
-		end
+		if already then
+			self._unlocked = true
+			Main.Visible = true
+		else
+			local keyGui = Instance.new("Frame")
+			keyGui.Name = "KeyOverlay"
+			keyGui.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			keyGui.BackgroundTransparency = 0.4
+			keyGui.Size = UDim2.fromScale(1, 1)
+			keyGui.BorderSizePixel = 0
+			keyGui.ZIndex = 100
+			keyGui.Parent = gui
 
-		function self:LoadConfig(name)
-			name = name or self.ConfigName or "default"
-			local path = self.ConfigFolder .. "/" .. name .. ".json"
-			local raw = readfile_(path)
-			if not raw then return false end
-			local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
-			if not ok or type(data) ~= "table" then return false end
-			for k, v in pairs(data) do
-				self._flags[k] = v
-				-- fire registered setters
-				if self._flagSetters and self._flagSetters[k] then
-					pcall(self._flagSetters[k], v)
+			local card = Instance.new("Frame")
+			card.AnchorPoint = Vector2.new(0.5, 0.5)
+			card.Position = UDim2.fromScale(0.5, 0.5)
+			card.Size = UDim2.fromOffset(400, 360)
+			card.BackgroundColor3 = Theme.Bg
+			card.BorderSizePixel = 0
+			card.ZIndex = 101
+			card.Parent = keyGui
+			corner(card, 14)
+			stroke(card, Theme.Accent, 1.5)
+
+			local kt = Instance.new("TextLabel")
+			kt.BackgroundTransparency = 1
+			kt.Position = UDim2.fromOffset(20, 16)
+			kt.Size = UDim2.new(1, -40, 0, 28)
+			kt.Font = Enum.Font.GothamBold
+			kt.Text = ks.Title or "Key System"
+			kt.TextColor3 = Theme.Text
+			kt.TextSize = 20
+			kt.TextXAlignment = Enum.TextXAlignment.Left
+			kt.ZIndex = 102
+			kt.Parent = card
+
+			local ks2 = Instance.new("TextLabel")
+			ks2.BackgroundTransparency = 1
+			ks2.Position = UDim2.fromOffset(20, 48)
+			ks2.Size = UDim2.new(1, -40, 0, 18)
+			ks2.Font = Enum.Font.Gotham
+			ks2.Text = ks.Subtitle or "Complete steps and enter key"
+			ks2.TextColor3 = Theme.TextDim
+			ks2.TextSize = 13
+			ks2.TextXAlignment = Enum.TextXAlignment.Left
+			ks2.ZIndex = 102
+			ks2.Parent = card
+
+			local stepsScroll = Instance.new("ScrollingFrame")
+			stepsScroll.BackgroundTransparency = 1
+			stepsScroll.Position = UDim2.fromOffset(16, 78)
+			stepsScroll.Size = UDim2.new(1, -32, 0, 130)
+			stepsScroll.ScrollBarThickness = 3
+			stepsScroll.BorderSizePixel = 0
+			stepsScroll.CanvasSize = UDim2.new()
+			stepsScroll.ZIndex = 102
+			stepsScroll.Parent = card
+			local sList = vlist(stepsScroll, 8)
+			autoCanvas(stepsScroll, sList)
+
+			for i, step in ipairs(ks.Steps or {}) do
+				local row = Instance.new("Frame")
+				row.BackgroundColor3 = Theme.Element
+				row.BorderSizePixel = 0
+				row.Size = UDim2.new(1, 0, 0, 38)
+				row.ZIndex = 103
+				row.Parent = stepsScroll
+				corner(row, 8)
+
+				local num = Instance.new("TextLabel")
+				num.BackgroundColor3 = Theme.Accent
+				num.Size = UDim2.fromOffset(22, 22)
+				num.Position = UDim2.fromOffset(8, 8)
+				num.Font = Enum.Font.GothamBold
+				num.Text = tostring(i)
+				num.TextColor3 = Theme.Text
+				num.TextSize = 12
+				num.ZIndex = 104
+				num.Parent = row
+				corner(num, 6)
+
+				local nm = Instance.new("TextLabel")
+				nm.BackgroundTransparency = 1
+				nm.Position = UDim2.fromOffset(38, 0)
+				nm.Size = UDim2.new(1, -120, 1, 0)
+				nm.Font = Enum.Font.GothamMedium
+				nm.Text = step.Name or ("Step " .. i)
+				nm.TextColor3 = Theme.Text
+				nm.TextSize = 13
+				nm.TextXAlignment = Enum.TextXAlignment.Left
+				nm.ZIndex = 104
+				nm.Parent = row
+
+				if step.Link and step.Link ~= "" then
+					local openBtn = Instance.new("TextButton")
+					openBtn.AnchorPoint = Vector2.new(1, 0.5)
+					openBtn.Position = UDim2.new(1, -8, 0.5, 0)
+					openBtn.Size = UDim2.fromOffset(68, 26)
+					openBtn.BackgroundColor3 = Theme.Accent
+					openBtn.BorderSizePixel = 0
+					openBtn.Font = Enum.Font.GothamBold
+					openBtn.Text = "Copy"
+					openBtn.TextColor3 = Theme.Text
+					openBtn.TextSize = 12
+					openBtn.AutoButtonColor = true
+					openBtn.ZIndex = 105
+					openBtn.Parent = row
+					corner(openBtn, 6)
+					openBtn.MouseButton1Click:Connect(function()
+						copyText(step.Link)
+						openBtn.Text = "OK"
+						task.delay(1, function() if openBtn.Parent then openBtn.Text = "Copy" end end)
+					end)
 				end
 			end
-			return true
-		end
 
-		self._flagSetters = {}
-		function self:BindFlag(name, setter)
-			self._flagSetters[name] = setter
-		end
+			local note = Instance.new("TextLabel")
+			note.BackgroundTransparency = 1
+			note.Position = UDim2.fromOffset(20, 218)
+			note.Size = UDim2.new(1, -40, 0, 16)
+			note.Font = Enum.Font.Gotham
+			note.Text = ks.Note or ""
+			note.TextColor3 = Theme.TextDim
+			note.TextSize = 12
+			note.TextXAlignment = Enum.TextXAlignment.Left
+			note.ZIndex = 102
+			note.Parent = card
 
-		function self:SetTheme(name)
-			if Themes[name] then
-				Theme = Themes[name]
-				self._themeName = name
-				-- full rebuild is heavy; notify user to re-exec for full theme
+			local box = Instance.new("TextBox")
+			box.BackgroundColor3 = Theme.Input
+			box.BorderSizePixel = 0
+			box.Position = UDim2.fromOffset(20, 244)
+			box.Size = UDim2.new(1, -40, 0, 34)
+			box.Font = Enum.Font.Gotham
+			box.PlaceholderText = "Enter key here..."
+			box.PlaceholderColor3 = Theme.TextDim
+			box.Text = ""
+			box.TextColor3 = Theme.Text
+			box.TextSize = 14
+			box.ClearTextOnFocus = false
+			box.ZIndex = 102
+			box.Parent = card
+			corner(box, 8)
+			stroke(box, Theme.Stroke, 1)
+
+			local status = Instance.new("TextLabel")
+			status.BackgroundTransparency = 1
+			status.Position = UDim2.fromOffset(20, 284)
+			status.Size = UDim2.new(1, -40, 0, 16)
+			status.Font = Enum.Font.Gotham
+			status.Text = ""
+			status.TextColor3 = Theme.Danger
+			status.TextSize = 12
+			status.TextXAlignment = Enum.TextXAlignment.Left
+			status.ZIndex = 102
+			status.Parent = card
+
+			local submit = Instance.new("TextButton")
+			submit.Position = UDim2.fromOffset(20, 308)
+			submit.Size = UDim2.new(1, -40, 0, 38)
+			submit.BackgroundColor3 = Theme.Accent
+			submit.BorderSizePixel = 0
+			submit.Font = Enum.Font.GothamBold
+			submit.Text = "Submit Key"
+			submit.TextColor3 = Theme.Text
+			submit.TextSize = 15
+			submit.AutoButtonColor = true
+			submit.ZIndex = 102
+			submit.Parent = card
+			corner(submit, 8)
+
+			local function tryKey()
+				local entered = tostring(box.Text or ""):gsub("%s+", "")
+				local valid = false
+				for _, k in ipairs(ks.Key or {}) do
+					if entered == tostring(k) then valid = true break end
+				end
+				if valid then
+					status.TextColor3 = Theme.Success
+					status.Text = "Key accepted!"
+					if ks.SaveKey then writefile_(keyPath, entered) end
+					self._unlocked = true
+					task.delay(0.35, function()
+						keyGui:Destroy()
+						Main.Visible = true
+						Main.Size = UDim2.fromOffset(0, 0)
+						tw(Main, { Size = UDim2.fromOffset(700, 480) }, 0.28, Enum.EasingStyle.Back)
+					end)
+				else
+					status.TextColor3 = Theme.Danger
+					status.Text = "Invalid key — try again"
+				end
 			end
+
+			submit.MouseButton1Click:Connect(tryKey)
+			box.FocusLost:Connect(function(enter) if enter then tryKey() end end)
 		end
-
-		function self:CreateTab(n) return CrackLib.CreateTab(self, n) end
-
-		function self:Unload()
-			for _, c in ipairs(self._connections) do pcall(function() c:Disconnect() end) end
-			if self.Gui then self.Gui:Destroy() end
-		end
-
-		function self:SetToggleKey(k) self.ToggleKey = k end
-		function self:SetVisible(v) self._visible = v Main.Visible = v end
-		function self:Notify(text, dur)
-			-- lightweight notify
-			local n = Instance.new("TextLabel")
-			n.BackgroundColor3 = Theme.Element
-			n.BorderSizePixel = 0
-			n.AnchorPoint = Vector2.new(1, 1)
-			n.Position = UDim2.new(1, -16, 1, -16)
-			n.Size = UDim2.fromOffset(260, 40)
-			n.Font = Enum.Font.GothamMedium
-			n.Text = "  " .. tostring(text)
-			n.TextColor3 = Theme.Text
-			n.TextSize = 13
-			n.TextXAlignment = Enum.TextXAlignment.Left
-			n.Parent = gui
-			corner(n, 8)
-			stroke(n, Theme.Accent, 1)
-			task.delay(dur or 2.5, function()
-				tw(n, { BackgroundTransparency = 1, TextTransparency = 1 }, 0.25)
-				task.delay(0.3, function() n:Destroy() end)
-			end)
-		end
-
-		window = self
-		ready:Fire()
 	end
 
-	showKeySystem(opts, build)
-
-	-- wait until built (sync API)
-	if not window then
-		ready.Event:Wait()
-	end
-	return window
+	return self
 end
 
+-- allow both CrackLib:Init and CrackLib.Init
+setmetatable(CrackLib, { __index = CrackLib })
+
 -- ===================== TAB =====================
-function CrackLib:CreateTab(name)
+function CrackLib.CreateTab(window, name)
 	local tabBtn = Instance.new("TextButton")
 	tabBtn.BackgroundColor3 = Theme.TabIdle
 	tabBtn.BorderSizePixel = 0
@@ -792,7 +681,7 @@ function CrackLib:CreateTab(name)
 	tabBtn.TextSize = 13
 	tabBtn.TextXAlignment = Enum.TextXAlignment.Left
 	tabBtn.AutoButtonColor = false
-	tabBtn.Parent = self.TabScroll
+	tabBtn.Parent = window.TabScroll
 	corner(tabBtn, 7)
 
 	local ind = Instance.new("Frame")
@@ -812,16 +701,16 @@ function CrackLib:CreateTab(name)
 	page.ScrollBarImageColor3 = Theme.Accent
 	page.CanvasSize = UDim2.new()
 	page.Visible = false
-	page.Parent = self.TabsFolder
+	page.Parent = window.TabsFolder
 	local pageList = vlist(page, 8)
 	pad(page, 12)
 	local refreshCanvas = autoCanvas(page, pageList)
 
 	local tabData = { Button = tabBtn, Page = page, Ind = ind, Refresh = refreshCanvas }
-	self._tabs[name] = tabData
+	window._tabs[name] = tabData
 
 	local function select()
-		for _, t in pairs(self._tabs) do
+		for _, t in pairs(window._tabs) do
 			t.Page.Visible = false
 			t.Button.BackgroundColor3 = Theme.TabIdle
 			t.Button.TextColor3 = Theme.TextDim
@@ -836,11 +725,13 @@ function CrackLib:CreateTab(name)
 
 	tabBtn.MouseButton1Click:Connect(select)
 	local count = 0
-	for _ in pairs(self._tabs) do count += 1 end
+	for _ in pairs(window._tabs) do count += 1 end
 	if count == 1 then select() end
 
-	local api = { _w = self, _t = tabData }
-	function api:Section(n) return CrackLib.CreateSection(self._w, tabData, n) end
+	local api = {}
+	function api:Section(n)
+		return CrackLib.CreateSection(window, tabData, n)
+	end
 	return api
 end
 
@@ -871,7 +762,7 @@ function CrackLib.CreateSection(window, tabData, secName)
 	box.Parent = tabData.Page
 	vlist(box, 7)
 
-	local section = { _box = box, _w = window, _page = tabData.Page, _refresh = tabData.Refresh }
+	local section = {}
 
 	local function element(h, bg)
 		local f = Instance.new("Frame")
@@ -883,18 +774,10 @@ function CrackLib.CreateSection(window, tabData, secName)
 		f.Parent = box
 		corner(f, 8)
 		stroke(f, Theme.Stroke, 1)
-		if not bg then
-			f.MouseEnter:Connect(function()
-				if f.BackgroundColor3 == Theme.Element then tw(f, { BackgroundColor3 = Theme.ElementHover }, 0.1) end
-			end)
-			f.MouseLeave:Connect(function()
-				if f.BackgroundColor3 == Theme.ElementHover then tw(f, { BackgroundColor3 = Theme.Element }, 0.1) end
-			end)
-		end
 		return f
 	end
 
-	local function label(parent, text, padRight)
+	local function titleText(parent, text, padRight)
 		local t = Instance.new("TextLabel")
 		t.Name = "TitleText"
 		t.BackgroundTransparency = 1
@@ -906,42 +789,43 @@ function CrackLib.CreateSection(window, tabData, secName)
 		t.TextSize = 13
 		t.TextXAlignment = Enum.TextXAlignment.Left
 		t.TextTruncate = Enum.TextTruncate.AtEnd
+		t.Active = false
 		t.Parent = parent
 		return t
 	end
 
 	local function refreshPage()
-		if section._refresh then task.defer(section._refresh) end
+		if tabData.Refresh then task.defer(tabData.Refresh) end
 	end
 
 	function section:Label(text)
 		local f = element(42)
-		label(f, text, 40)
+		titleText(f, text, 12)
 		local d = {}
-		function d:SetText(v) local t = f:FindFirstChild("TitleText") if t then t.Text = tostring(v) end end
+		function d:SetText(v) local t = f.TitleText if t then t.Text = tostring(v) end end
 		return d
 	end
 
 	function section:Info(text)
 		local f = element(42, Theme.Info)
-		label(f, text, 12)
+		titleText(f, text, 12)
 		local d = {}
-		function d:SetText(v) local t = f:FindFirstChild("TitleText") if t then t.Text = tostring(v) end end
+		function d:SetText(v) local t = f.TitleText if t then t.Text = tostring(v) end end
 		return d
 	end
 
 	function section:Warning(text)
 		local f = element(42, Theme.Warning)
-		label(f, text, 12)
+		titleText(f, text, 12)
 		local d = {}
-		function d:SetText(v) local t = f:FindFirstChild("TitleText") if t then t.Text = tostring(v) end end
+		function d:SetText(v) local t = f.TitleText if t then t.Text = tostring(v) end end
 		return d
 	end
 
 	function section:Toggle(text, default, callback, flag)
 		local state = default == true
 		local f = element(42)
-		label(f, text, 58)
+		titleText(f, text, 58)
 
 		local track = Instance.new("Frame")
 		track.AnchorPoint = Vector2.new(1, 0.5)
@@ -964,6 +848,7 @@ function CrackLib.CreateSection(window, tabData, secName)
 		hit.BackgroundTransparency = 1
 		hit.Size = UDim2.fromScale(1, 1)
 		hit.Text = ""
+		hit.ZIndex = 5
 		hit.Parent = f
 
 		local function set(v, fire)
@@ -971,15 +856,19 @@ function CrackLib.CreateSection(window, tabData, secName)
 			tw(track, { BackgroundColor3 = state and Theme.Success or Theme.Track }, 0.15)
 			tw(knob, { Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8) }, 0.18, Enum.EasingStyle.Back)
 			if flag then window:SetFlag(flag, state) end
-			if fire ~= false and callback then task.spawn(callback, state) end
+			if fire then safeCall(callback, state) end
 		end
 
-		hit.MouseButton1Click:Connect(function() set(not state, true) end)
+		hit.MouseButton1Click:Connect(function()
+			set(not state, true)
+		end)
+
 		if flag then
 			window:SetFlag(flag, state)
 			window:BindFlag(flag, function(v) set(v, true) end)
 		end
-		if default and callback then task.defer(callback, true) end
+
+		-- do NOT auto-fire callback on default true (was confusing); only on click
 
 		local d = {}
 		function d:Set(v) set(v, true) end
@@ -990,26 +879,29 @@ function CrackLib.CreateSection(window, tabData, secName)
 
 	function section:Button(text, callback)
 		local f = element(42, Color3.fromRGB(42, 48, 64))
-		local t = label(f, text, 0)
+		local t = titleText(f, text, 0)
 		t.Size = UDim2.fromScale(1, 1)
 		t.Position = UDim2.new()
 		t.TextXAlignment = Enum.TextXAlignment.Center
 		t.TextColor3 = Theme.Accent
+
 		local hit = Instance.new("TextButton")
 		hit.BackgroundTransparency = 1
 		hit.Size = UDim2.fromScale(1, 1)
 		hit.Text = ""
+		hit.ZIndex = 5
 		hit.Parent = f
 		hit.MouseButton1Click:Connect(function()
 			tw(f, { BackgroundColor3 = Theme.Accent }, 0.06)
 			task.delay(0.08, function() tw(f, { BackgroundColor3 = Color3.fromRGB(42, 48, 64) }, 0.18) end)
-			if callback then task.spawn(callback) end
+			safeCall(callback)
 		end)
 		return {}
 	end
 
 	function section:Slider(text, min, max, default, callback, decimals, flag)
-		min, max = min or 0, max or 100
+		min = min or 0
+		max = max or 100
 		default = default or min
 		decimals = decimals or 0
 		local value = default
@@ -1072,7 +964,7 @@ function CrackLib.CreateSection(window, tabData, secName)
 			knob.Position = UDim2.new(rel, 0, 0.5, 0)
 			valLbl.Text = tostring(value)
 			if flag then window:SetFlag(flag, value) end
-			if callback then task.spawn(callback, value) end
+			safeCall(callback, value)
 		end
 
 		track.InputBegan:Connect(function(i)
@@ -1096,7 +988,7 @@ function CrackLib.CreateSection(window, tabData, secName)
 				fill.Size = UDim2.new(rel, 0, 1, 0)
 				knob.Position = UDim2.new(rel, 0, 0.5, 0)
 				valLbl.Text = tostring(value)
-				if callback then callback(value) end
+				safeCall(callback, value)
 			end)
 		end
 
@@ -1108,35 +1000,33 @@ function CrackLib.CreateSection(window, tabData, secName)
 			knob.Position = UDim2.new(rel, 0, 0.5, 0)
 			valLbl.Text = tostring(value)
 			if flag then window:SetFlag(flag, value) end
-			if callback then callback(value) end
+			safeCall(callback, value)
 		end
 		function d:Get() return value end
 		return d
 	end
 	section.ConfigSlider = section.Slider
 
-	-- FIXED DROPDOWN
 	function section:Dropdown(text, options, default, callback, flag)
 		options = options or { "None" }
 		local selected = default or options[1]
 		local open = false
-		local CLOSED_H = 42
+		local CLOSED = 42
 
-		local f = element(CLOSED_H)
+		local f = element(CLOSED)
 		f.ClipsDescendants = true
-		local title = label(f, text .. "  ·  " .. tostring(selected), 40)
+		local title = titleText(f, text .. "  ·  " .. tostring(selected), 40)
 
 		local chev = Instance.new("ImageLabel")
 		chev.BackgroundTransparency = 1
 		chev.AnchorPoint = Vector2.new(1, 0)
-		chev.Position = UDim2.new(1, -10, 0, 10)
-		chev.Size = UDim2.fromOffset(20, 20)
+		chev.Position = UDim2.new(1, -10, 0, 11)
+		chev.Size = UDim2.fromOffset(18, 18)
 		chev.Image = ICONS.Chevron
 		chev.ImageColor3 = Theme.TextDim
 		chev.Parent = f
 
 		local listFrame = Instance.new("Frame")
-		listFrame.Name = "DropList"
 		listFrame.BackgroundColor3 = Theme.Input
 		listFrame.BorderSizePixel = 0
 		listFrame.Position = UDim2.fromOffset(8, 40)
@@ -1149,15 +1039,15 @@ function CrackLib.CreateSection(window, tabData, secName)
 		holder.BackgroundTransparency = 1
 		holder.Size = UDim2.fromScale(1, 1)
 		holder.Parent = listFrame
-		local holdList = vlist(holder, 2)
+		vlist(holder, 2)
 		pad(holder, 4)
 
 		local function closeDrop()
 			open = false
-			tw(chev, { Rotation = 0 }, 0.15)
-			tw(listFrame, { Size = UDim2.new(1, -16, 0, 0) }, 0.15)
-			tw(f, { Size = UDim2.new(1, 0, 0, CLOSED_H) }, 0.18)
-			task.delay(0.2, refreshPage)
+			tw(chev, { Rotation = 0 }, 0.12)
+			listFrame.Size = UDim2.new(1, -16, 0, 0)
+			f.Size = UDim2.new(1, 0, 0, CLOSED)
+			refreshPage()
 		end
 
 		local function rebuild()
@@ -1174,14 +1064,14 @@ function CrackLib.CreateSection(window, tabData, secName)
 				b.TextColor3 = Theme.Text
 				b.TextSize = 12
 				b.TextXAlignment = Enum.TextXAlignment.Left
-				b.AutoButtonColor = false
+				b.AutoButtonColor = true
 				b.Parent = holder
 				corner(b, 5)
 				b.MouseButton1Click:Connect(function()
 					selected = opt
 					title.Text = text .. "  ·  " .. tostring(opt)
 					if flag then window:SetFlag(flag, selected) end
-					if callback then task.spawn(callback, selected) end
+					safeCall(callback, selected)
 					closeDrop()
 					rebuild()
 				end)
@@ -1191,18 +1081,18 @@ function CrackLib.CreateSection(window, tabData, secName)
 
 		local hit = Instance.new("TextButton")
 		hit.BackgroundTransparency = 1
-		hit.Size = UDim2.new(1, 0, 0, CLOSED_H)
+		hit.Size = UDim2.new(1, 0, 0, CLOSED)
 		hit.Text = ""
-		hit.ZIndex = 3
+		hit.ZIndex = 6
 		hit.Parent = f
 		hit.MouseButton1Click:Connect(function()
 			open = not open
 			if open then
-				local h = math.clamp(#options * 30 + 10, 40, 140)
+				local h = math.clamp(#options * 30 + 10, 40, 150)
 				listFrame.Size = UDim2.new(1, -16, 0, h)
-				tw(f, { Size = UDim2.new(1, 0, 0, CLOSED_H + h + 6) }, 0.2)
-				tw(chev, { Rotation = 180 }, 0.15)
-				task.delay(0.05, refreshPage)
+				f.Size = UDim2.new(1, 0, 0, CLOSED + h + 6)
+				tw(chev, { Rotation = 180 }, 0.12)
+				refreshPage()
 			else
 				closeDrop()
 			end
@@ -1213,7 +1103,7 @@ function CrackLib.CreateSection(window, tabData, secName)
 			window:BindFlag(flag, function(v)
 				selected = v
 				title.Text = text .. "  ·  " .. tostring(v)
-				if callback then callback(v) end
+				safeCall(callback, v)
 				rebuild()
 			end)
 		end
@@ -1223,14 +1113,11 @@ function CrackLib.CreateSection(window, tabData, secName)
 			selected = v
 			title.Text = text .. "  ·  " .. tostring(v)
 			if flag then window:SetFlag(flag, v) end
-			if callback then callback(v) end
+			safeCall(callback, v)
 			rebuild()
 		end
 		function d:Get() return selected end
-		function d:Refresh(opts)
-			options = opts or options
-			rebuild()
-		end
+		function d:Refresh(opts) options = opts or options rebuild() end
 		return d
 	end
 	section.ConfigDropdown = section.Dropdown
@@ -1242,16 +1129,16 @@ function CrackLib.CreateSection(window, tabData, secName)
 			for _, x in ipairs(defaults) do selected[tostring(x)] = true end
 		end
 		local open = false
-		local CLOSED_H = 42
+		local CLOSED = 42
 
-		local f = element(CLOSED_H)
+		local f = element(CLOSED)
 		f.ClipsDescendants = true
-		local title = label(f, text, 40)
+		titleText(f, text, 40)
 		local chev = Instance.new("ImageLabel")
 		chev.BackgroundTransparency = 1
 		chev.AnchorPoint = Vector2.new(1, 0)
-		chev.Position = UDim2.new(1, -10, 0, 10)
-		chev.Size = UDim2.fromOffset(20, 20)
+		chev.Position = UDim2.new(1, -10, 0, 11)
+		chev.Size = UDim2.fromOffset(18, 18)
 		chev.Image = ICONS.Chevron
 		chev.ImageColor3 = Theme.TextDim
 		chev.Parent = f
@@ -1273,16 +1160,12 @@ function CrackLib.CreateSection(window, tabData, secName)
 
 		local function listSel()
 			local t = {}
-			for _, o in ipairs(options) do
-				if selected[tostring(o)] then t[#t + 1] = o end
-			end
+			for _, o in ipairs(options) do if selected[tostring(o)] then t[#t + 1] = o end end
 			return t
 		end
 
 		local function rebuild()
-			for _, c in ipairs(holder:GetChildren()) do
-				if c:IsA("TextButton") then c:Destroy() end
-			end
+			for _, c in ipairs(holder:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
 			for _, opt in ipairs(options) do
 				local on = selected[tostring(opt)]
 				local b = Instance.new("TextButton")
@@ -1294,14 +1177,14 @@ function CrackLib.CreateSection(window, tabData, secName)
 				b.TextColor3 = Theme.Text
 				b.TextSize = 12
 				b.TextXAlignment = Enum.TextXAlignment.Left
-				b.AutoButtonColor = false
+				b.AutoButtonColor = true
 				b.Parent = holder
 				corner(b, 5)
 				b.MouseButton1Click:Connect(function()
 					selected[tostring(opt)] = not selected[tostring(opt)]
 					local ls = listSel()
 					if flag then window:SetFlag(flag, ls) end
-					if callback then task.spawn(callback, ls) end
+					safeCall(callback, ls)
 					rebuild()
 				end)
 			end
@@ -1310,24 +1193,24 @@ function CrackLib.CreateSection(window, tabData, secName)
 
 		local hit = Instance.new("TextButton")
 		hit.BackgroundTransparency = 1
-		hit.Size = UDim2.new(1, 0, 0, CLOSED_H)
+		hit.Size = UDim2.new(1, 0, 0, CLOSED)
 		hit.Text = ""
-		hit.ZIndex = 3
+		hit.ZIndex = 6
 		hit.Parent = f
 		hit.MouseButton1Click:Connect(function()
 			open = not open
 			if open then
-				local h = math.clamp(#options * 30 + 10, 40, 140)
+				local h = math.clamp(#options * 30 + 10, 40, 150)
 				listFrame.Size = UDim2.new(1, -16, 0, h)
-				tw(f, { Size = UDim2.new(1, 0, 0, CLOSED_H + h + 6) }, 0.2)
-				tw(chev, { Rotation = 180 }, 0.15)
-				task.delay(0.05, refreshPage)
+				f.Size = UDim2.new(1, 0, 0, CLOSED + h + 6)
+				tw(chev, { Rotation = 180 }, 0.12)
+				refreshPage()
 			else
 				open = false
-				tw(chev, { Rotation = 0 }, 0.15)
-				tw(listFrame, { Size = UDim2.new(1, -16, 0, 0) }, 0.15)
-				tw(f, { Size = UDim2.new(1, 0, 0, CLOSED_H) }, 0.18)
-				task.delay(0.2, refreshPage)
+				tw(chev, { Rotation = 0 }, 0.12)
+				listFrame.Size = UDim2.new(1, -16, 0, 0)
+				f.Size = UDim2.new(1, 0, 0, CLOSED)
+				refreshPage()
 			end
 		end)
 
@@ -1339,12 +1222,12 @@ function CrackLib.CreateSection(window, tabData, secName)
 
 	function section:Textbox(text, default, callback, flag)
 		local f = element(42)
-		label(f, text, 0).Size = UDim2.new(0.32, 0, 1, 0)
+		titleText(f, text, 0).Size = UDim2.new(0.3, 0, 1, 0)
 		local box = Instance.new("TextBox")
 		box.BackgroundColor3 = Theme.Input
 		box.BorderSizePixel = 0
-		box.Position = UDim2.new(0.34, 0, 0.5, -12)
-		box.Size = UDim2.new(0.5, 0, 0, 24)
+		box.Position = UDim2.new(0.32, 0, 0.5, -12)
+		box.Size = UDim2.new(0.52, 0, 0, 24)
 		box.Font = Enum.Font.Gotham
 		box.Text = tostring(default or "")
 		box.PlaceholderText = "..."
@@ -1363,29 +1246,33 @@ function CrackLib.CreateSection(window, tabData, secName)
 		copyBtn.BackgroundColor3 = Theme.Input
 		copyBtn.BorderSizePixel = 0
 		copyBtn.Font = Enum.Font.GothamBold
-		copyBtn.Text = "⎘"
+		copyBtn.Text = "C"
 		copyBtn.TextColor3 = Theme.TextDim
-		copyBtn.TextSize = 14
-		copyBtn.AutoButtonColor = false
+		copyBtn.TextSize = 12
+		copyBtn.AutoButtonColor = true
 		copyBtn.Parent = f
 		corner(copyBtn, 5)
 		copyBtn.MouseButton1Click:Connect(function()
-			if copyText(box.Text) then
-				copyBtn.TextColor3 = Theme.Success
-				task.delay(0.8, function() copyBtn.TextColor3 = Theme.TextDim end)
-			end
+			copyText(box.Text)
+			copyBtn.TextColor3 = Theme.Success
+			task.delay(0.7, function() copyBtn.TextColor3 = Theme.TextDim end)
 		end)
 
 		box.Focused:Connect(function() st.Color = Theme.Accent end)
 		box.FocusLost:Connect(function()
 			st.Color = Theme.Stroke
 			if flag then window:SetFlag(flag, box.Text) end
-			if callback then callback(box.Text) end
+			safeCall(callback, box.Text)
 		end)
+
 		if flag then
 			window:SetFlag(flag, box.Text)
-			window:BindFlag(flag, function(v) box.Text = tostring(v or "") if callback then callback(box.Text) end end)
+			window:BindFlag(flag, function(v)
+				box.Text = tostring(v or "")
+				safeCall(callback, box.Text)
+			end)
 		end
+
 		local d = {}
 		function d:Set(v) box.Text = tostring(v) end
 		function d:Get() return box.Text end
@@ -1397,7 +1284,8 @@ function CrackLib.CreateSection(window, tabData, secName)
 		local key = defaultKey or Enum.KeyCode.E
 		local listening = false
 		local f = element(42)
-		label(f, text, 90)
+		titleText(f, text, 90)
+
 		local keyBtn = Instance.new("TextButton")
 		keyBtn.AnchorPoint = Vector2.new(1, 0.5)
 		keyBtn.Position = UDim2.new(1, -10, 0.5, 0)
@@ -1408,7 +1296,7 @@ function CrackLib.CreateSection(window, tabData, secName)
 		keyBtn.Text = key.Name
 		keyBtn.TextColor3 = Theme.Accent
 		keyBtn.TextSize = 11
-		keyBtn.AutoButtonColor = false
+		keyBtn.AutoButtonColor = true
 		keyBtn.Parent = f
 		corner(keyBtn, 6)
 
@@ -1423,17 +1311,10 @@ function CrackLib.CreateSection(window, tabData, secName)
 				keyBtn.Text = key.Name
 				listening = false
 				if flag then window:SetFlag(flag, key.Name) end
-				if callback then callback(key) end
+				safeCall(callback, key)
 			end
 		end))
 
-		if flag then
-			window:SetFlag(flag, key.Name)
-			window:BindFlag(flag, function(v)
-				local ok, k = pcall(function() return Enum.KeyCode[v] end)
-				if ok and k then key = k keyBtn.Text = k.Name end
-			end)
-		end
 		local d = {}
 		function d:Set(k) key = k keyBtn.Text = k.Name end
 		function d:Get() return key end
@@ -1442,10 +1323,15 @@ function CrackLib.CreateSection(window, tabData, secName)
 	section.ConfigKeybind = section.Keybind
 
 	function section:ColorPicker(text, default, callback, flag)
-		default = default or Theme.Accent
-		local color = default
+		local color = default or Theme.Accent
 		local f = element(42)
-		label(f, text, 50)
+		titleText(f, text, 50)
+		local presets = {
+			Color3.fromRGB(100, 140, 255), Color3.fromRGB(170, 100, 255),
+			Color3.fromRGB(80, 220, 140), Color3.fromRGB(240, 80, 90),
+			Color3.fromRGB(255, 180, 50), Color3.fromRGB(255, 255, 255),
+		}
+		local idx = 1
 		local swatch = Instance.new("TextButton")
 		swatch.AnchorPoint = Vector2.new(1, 0.5)
 		swatch.Position = UDim2.new(1, -12, 0.5, 0)
@@ -1453,45 +1339,19 @@ function CrackLib.CreateSection(window, tabData, secName)
 		swatch.BackgroundColor3 = color
 		swatch.BorderSizePixel = 0
 		swatch.Text = ""
-		swatch.AutoButtonColor = false
+		swatch.AutoButtonColor = true
 		swatch.Parent = f
 		corner(swatch, 6)
-		stroke(swatch, Theme.Stroke, 1)
-
-		-- simple cycle presets on click
-		local presets = {
-			Color3.fromRGB(100, 140, 255),
-			Color3.fromRGB(170, 100, 255),
-			Color3.fromRGB(80, 220, 140),
-			Color3.fromRGB(240, 80, 90),
-			Color3.fromRGB(255, 180, 50),
-			Color3.fromRGB(255, 255, 255),
-		}
-		local idx = 1
 		swatch.MouseButton1Click:Connect(function()
 			idx = (idx % #presets) + 1
 			color = presets[idx]
 			swatch.BackgroundColor3 = color
-			if flag then
-				window:SetFlag(flag, { R = color.R, G = color.G, B = color.B })
-			end
-			if callback then task.spawn(callback, color) end
+			if flag then window:SetFlag(flag, { R = color.R, G = color.G, B = color.B }) end
+			safeCall(callback, color)
 		end)
 		local d = {}
 		function d:Set(c) color = c swatch.BackgroundColor3 = c end
 		function d:Get() return color end
-		return d
-	end
-
-	function section:Paragraph(text)
-		local f = element(60)
-		local t = label(f, text, 12)
-		t.TextWrapped = true
-		t.TextYAlignment = Enum.TextYAlignment.Top
-		t.Position = UDim2.fromOffset(12, 8)
-		t.Size = UDim2.new(1, -24, 1, -12)
-		local d = {}
-		function d:SetText(v) t.Text = tostring(v) end
 		return d
 	end
 
