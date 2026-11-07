@@ -1101,9 +1101,10 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				return registerTheme(data)
 			end
 
-			-- DROPDOWN
+			-- DROPDOWN (fixed multi-select)
 			function SectionData:Dropdown(label, options, callback, multi)
 				options = type(options) == "table" and options or {}
+				multi = multi and true or false
 				local data = {
 					Value = nil,
 					Values = {},
@@ -1113,7 +1114,9 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				local rows = {}
 				local f, fs = baseFrame(45)
 				f.ClipsDescendants = true
+				f.ZIndex = 5
 				data._frame = f
+
 				local txt = Instance.new("TextLabel")
 				txt.BackgroundTransparency = 1
 				txt.Position = UDim2.new(0, 20, 0, 0)
@@ -1122,7 +1125,9 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				txt.TextColor3 = CurrentTheme.TextColor
 				txt.TextScaled = true
 				txt.TextXAlignment = Enum.TextXAlignment.Left
+				txt.ZIndex = 6
 				txt.Parent = f
+
 				local arrow = Instance.new("TextButton")
 				arrow.BackgroundTransparency = 1
 				arrow.Position = UDim2.new(1, -44, 0, 0)
@@ -1130,37 +1135,126 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 				arrow.Text = "▼"
 				arrow.TextColor3 = CurrentTheme.TextColor
 				arrow.TextScaled = true
+				arrow.ZIndex = 7
 				arrow.Parent = f
+
+				-- full header hit so open works (not only arrow)
+				local headHit = Instance.new("TextButton")
+				headHit.BackgroundTransparency = 1
+				headHit.Size = UDim2.new(1, -44, 0, 45)
+				headHit.Position = UDim2.new(0, 0, 0, 0)
+				headHit.Text = ""
+				headHit.ZIndex = 6
+				headHit.Parent = f
+
 				local list = Instance.new("Frame")
 				list.Position = UDim2.new(0, 0, 0, 45)
 				list.Size = UDim2.new(1, 0, 0, 0)
 				list.BackgroundColor3 = CurrentTheme.Background
 				list.BorderSizePixel = 0
+				list.ZIndex = 8
+				list.ClipsDescendants = true
 				list.Parent = f
-				Instance.new("UIListLayout", list)
+				local listLayout = Instance.new("UIListLayout")
+				listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+				listLayout.Parent = list
+
+				local function isOn(option)
+					return data.Values[option] == true
+				end
 
 				local function selectedText()
 					if multi then
 						local on = {}
 						for _, o in ipairs(options) do
-							if data.Values[o] then table.insert(on, tostring(o)) end
+							if isOn(o) then
+								table.insert(on, tostring(o))
+							end
 						end
-						return #on > 0 and table.concat(on, ", ") or tostring(label or "Dropdown")
+						if #on == 0 then
+							return tostring(label or "Dropdown")
+						end
+						if #on <= 2 then
+							return table.concat(on, ", ")
+						end
+						return tostring(on[1]) .. " +" .. tostring(#on - 1)
 					end
 					return data.Value and tostring(data.Value) or tostring(label or "Dropdown")
 				end
 
 				local function refreshSize()
 					local n = #options
-					list.Size = UDim2.new(1, 0, 0, data.Open and n * 34 or 0)
-					f.Size = UDim2.new(1, 0, 0, data.Open and 45 + n * 34 or 45)
+					local h = data.Open and (n * 34) or 0
+					list.Size = UDim2.new(1, 0, 0, h)
+					f.Size = UDim2.new(1, 0, 0, 45 + h)
 					arrow.Text = data.Open and "▲" or "▼"
 				end
 
+				local function paintRow(row, option)
+					if multi and isOn(option) then
+						row.BackgroundColor3 = CurrentTheme.Accent or CurrentTheme.TabBackgroundSelected
+						row.TextColor3 = CurrentTheme.SelectedTabTextColor or CurrentTheme.TextColor
+						row.Text = "✓ " .. tostring(option)
+					else
+						row.BackgroundColor3 = CurrentTheme.ElementBackground
+						row.TextColor3 = CurrentTheme.TextColor
+						row.Text = tostring(option)
+					end
+				end
+
+				local function paintAll()
+					for _, row in ipairs(rows) do
+						local option = row:GetAttribute("Option")
+						if option ~= nil then
+							paintRow(row, option)
+						end
+					end
+					txt.Text = selectedText()
+				end
+
+				local function normalizeMulti(v)
+					local map = {}
+					if type(v) ~= "table" then
+						return map
+					end
+					-- map style { Name = true }
+					local hasBool = false
+					for k, val in pairs(v) do
+						if type(k) == "string" and type(val) == "boolean" then
+							hasBool = true
+							if val then map[k] = true end
+						end
+					end
+					if hasBool then return map end
+					-- array style { "Name1", "Name2" }
+					for _, name in ipairs(v) do
+						if name ~= nil then
+							map[tostring(name)] = true
+						end
+					end
+					return map
+				end
+
+				local function fire()
+					if not callback then return end
+					if multi then
+						-- pass a copy so callers can store it safely
+						local copy = {}
+						for k, val in pairs(data.Values) do
+							if val then copy[k] = true end
+						end
+						task.spawn(callback, copy)
+					else
+						task.spawn(callback, data.Value)
+					end
+				end
+
 				local function build()
-					for _, r in ipairs(rows) do if r.Parent then r:Destroy() end end
+					for _, r in ipairs(rows) do
+						if r.Parent then r:Destroy() end
+					end
 					table.clear(rows)
-					for _, option in ipairs(options) do
+					for i, option in ipairs(options) do
 						local row = Instance.new("TextButton")
 						row.Size = UDim2.new(1, 0, 0, 34)
 						row.BackgroundColor3 = CurrentTheme.ElementBackground
@@ -1169,69 +1263,122 @@ function CrackedLib:Init(name, draggable, keybind, theme, keysystem)
 						row.TextColor3 = CurrentTheme.TextColor
 						row.TextScaled = true
 						row.AutoButtonColor = false
+						row.ZIndex = 9
+						row.LayoutOrder = i
+						row:SetAttribute("Option", option)
 						row.Parent = list
+						paintRow(row, option)
 						connectAndTrack(data._connections, row.MouseButton1Click, function()
 							playSound("Click")
 							if multi then
-								data.Values[option] = not data.Values[option]
+								data.Values[option] = not isOn(option)
+								paintAll()
+								-- keep open while multi-picking
+								refreshSize()
+								fire()
 							else
 								data.Value = option
 								data.Open = false
+								txt.Text = selectedText()
+								refreshSize()
+								fire()
 							end
-							txt.Text = selectedText()
-							refreshSize()
-							if callback then task.spawn(callback, multi and data.Values or data.Value) end
 						end)
 						table.insert(rows, row)
 					end
 					txt.Text = selectedText()
 					refreshSize()
 				end
-				build()
-				connectAndTrack(data._connections, arrow.MouseButton1Click, function()
-					data.Open = not data.Open
-					playSound("Click")
+
+				local function setOpen(open)
+					data.Open = open and true or false
 					refreshSize()
-				end)
-				function data:Set(v)
-					if multi then data.Values = type(v) == "table" and v or {}
-					else data.Value = v end
-					txt.Text = selectedText()
+					paintAll()
 				end
-				function data:Get() return multi and data.Values or data.Value end
+
+				build()
+
+				connectAndTrack(data._connections, arrow.MouseButton1Click, function()
+					playSound("Click")
+					setOpen(not data.Open)
+				end)
+				connectAndTrack(data._connections, headHit.MouseButton1Click, function()
+					playSound("Click")
+					setOpen(not data.Open)
+				end)
+
+				function data:Set(v)
+					if multi then
+						data.Values = normalizeMulti(v)
+					else
+						data.Value = v
+					end
+					paintAll()
+					refreshSize()
+				end
+				function data:Get()
+					if multi then
+						local copy = {}
+						for k, val in pairs(data.Values) do
+							if val then copy[k] = true end
+						end
+						return copy
+					end
+					return data.Value
+				end
+				function data:GetList()
+					local listOut = {}
+					if multi then
+						for _, o in ipairs(options) do
+							if isOn(o) then listOut[#listOut + 1] = o end
+						end
+					elseif data.Value ~= nil then
+						listOut[1] = data.Value
+					end
+					return listOut
+				end
 				function data:Refresh(newOpts, keep)
 					options = type(newOpts) == "table" and newOpts or {}
-					if not keep then data.Value = nil data.Values = {} end
+					if not keep then
+						data.Value = nil
+						data.Values = {}
+					end
 					build()
 				end
-				function data:ChangeOptions(n, k) self:Refresh(n, k) end
-				function data:Destroy() destroyElement(data) end
+				function data:ChangeOptions(n, k)
+					self:Refresh(n, k)
+				end
+				function data:Destroy()
+					destroyElement(data)
+				end
 				function data:RefreshTheme()
 					f.BackgroundColor3 = CurrentTheme.ElementBackground
 					fs.Color = CurrentTheme.ElementStroke
 					txt.TextColor3 = CurrentTheme.TextColor
 					arrow.TextColor3 = CurrentTheme.TextColor
 					list.BackgroundColor3 = CurrentTheme.Background
-					for _, r in ipairs(rows) do
-						r.BackgroundColor3 = CurrentTheme.ElementBackground
-						r.TextColor3 = CurrentTheme.TextColor
-					end
+					paintAll()
 				end
 				return registerTheme(data)
 			end
 
 			function SectionData:ConfigDropdown(label, options, callback, multi, key)
 				local cfgKey = key or label
+				multi = multi and true or false
 				local saved = CrackedLib.Config.Data[cfgKey]
 				local data = self:Dropdown(label, options, function(v)
 					CrackedLib.Config.Data[cfgKey] = v
 					CrackedLib.Config:Save()
-					if callback then callback(v) end
+					if callback then
+						callback(v)
+					end
 				end, multi)
 				if saved ~= nil then
 					task.defer(function()
 						data:Set(saved)
-						if callback then pcall(callback, multi and data.Values or data.Value) end
+						if callback then
+							pcall(callback, multi and data:Get() or data.Value)
+						end
 					end)
 				end
 				return data
